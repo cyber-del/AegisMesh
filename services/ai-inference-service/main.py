@@ -18,14 +18,14 @@ from pydantic import BaseModel
 
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
-from telemetry import configure_tracing
+from telemetry import configure_telemetry
 
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "ai-inference-service")
 MODEL_NAME = os.getenv("MODEL_NAME", "aegis-sim-1")
 # Baseline per-request latency. Phase 7 Fault A will inflate this to 3-5s at runtime.
 BASE_LATENCY_MS = int(os.getenv("INFER_BASE_LATENCY_MS", "150"))
 
-tracer = configure_tracing(SERVICE_NAME)
+tracer, log = configure_telemetry(SERVICE_NAME)
 
 app = FastAPI(title="AegisMesh ai-inference-service", version="0.1.0")
 # Auto-instrument inbound HTTP: creates the server span for every request.
@@ -60,6 +60,7 @@ async def infer(req: InferRequest):
     start = time.perf_counter()
     input_tokens = estimate_tokens(req.prompt)
     cap = min(req.max_tokens or 128, 512)
+    log.info("inference request received (input_tokens=%d, max_tokens=%d)", input_tokens, cap)
 
     with tracer.start_as_current_span("llm.generate") as span:
         # Simulate model work. Kept short here; chaos inflates it later.

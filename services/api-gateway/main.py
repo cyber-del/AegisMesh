@@ -20,13 +20,13 @@ from pydantic import BaseModel
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
-from telemetry import configure_tracing
+from telemetry import configure_telemetry
 
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "api-gateway")
 WORKER_QUEUE_URL = os.getenv("WORKER_QUEUE_URL", "http://localhost:8002")
 GATEWAY_TIMEOUT_MS = int(os.getenv("GATEWAY_TIMEOUT_MS", "5000"))
 
-configure_tracing(SERVICE_NAME)
+_, log = configure_telemetry(SERVICE_NAME)
 HTTPXClientInstrumentor().instrument()  # traces + propagates context on all httpx calls
 
 # One shared async client; the 5s timeout is the whole point of this service.
@@ -55,16 +55,19 @@ def health():
 
 @app.post("/v1/generate")
 async def generate(req: GenerateRequest):
+    log.info("generate request received (prompt_chars=%d)", len(req.prompt))
     try:
         resp = await client.post(f"{WORKER_QUEUE_URL}/v1/process", json=req.model_dump())
     except httpx.TimeoutException:
         # The failure the demo cares about: downstream took longer than our budget.
+        log.warning("gateway timeout: downstream exceeded %dms budget -> 504", GATEWAY_TIMEOUT_MS)
         return Response(
             content='{"error":"upstream timeout at api-gateway","code":"gateway_timeout"}',
             status_code=504,
             media_type="application/json",
         )
     except httpx.HTTPError as exc:
+        log.warning("upstream unreachable (%s) -> 502", type(exc).__name__)
         return Response(
             content=f'{{"error":"upstream unreachable at api-gateway","detail":"{type(exc).__name__}"}}',
             status_code=502,

@@ -25,7 +25,7 @@ from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
-from telemetry import configure_tracing
+from telemetry import configure_telemetry
 
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "worker-queue")
 AI_INFERENCE_URL = os.getenv("AI_INFERENCE_URL", "http://localhost:8003")
@@ -34,7 +34,7 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 RETRY_BACKOFF_MS = int(os.getenv("RETRY_BACKOFF_MS", "200"))
 DOWNSTREAM_TIMEOUT_MS = int(os.getenv("DOWNSTREAM_TIMEOUT_MS", "10000"))
 
-tracer = configure_tracing(SERVICE_NAME)
+tracer, log = configure_telemetry(SERVICE_NAME)
 HTTPXClientInstrumentor().instrument()
 
 
@@ -51,11 +51,14 @@ class ResizablePool:
         self._active = 0
         self._cond = asyncio.Condition()
 
-    async def acquire(self) -> None:
+    async def acquire(self) -> bool:
+        """Occupy a slot. Returns True if the request had to wait (pool was saturated)."""
         async with self._cond:
+            waited = self._active >= self._max
             while self._active >= self._max:
                 await self._cond.wait()
             self._active += 1
+            return waited
 
     async def release(self) -> None:
         async with self._cond:
@@ -119,10 +122,17 @@ def health():
 @app.post("/v1/process")
 async def process(req: ProcessRequest):
     span = trace.get_current_span()
-    await pool.acquire()  # occupy a slot for the whole request, retries included
+    log.info("process request received (prompt_chars=%d)", len(req.prompt))
+    waited = await pool.acquire()  # occupy a slot for the whole request, retries included
     stats = pool.stats()
     span.set_attribute("worker.pool.active", stats["active"])
     span.set_attribute("worker.pool.max", stats["max"])
+    if waited:
+        # This is the saturation signal the AI controller looks for in Fault A.
+        log.warning("pool slot exhausted; request queued then acquired (active=%d max=%d)",
+                    stats["active"], stats["max"])
+    else:
+        log.info("pool slot acquired (active=%d max=%d)", stats["active"], stats["max"])
     try:
         last_resp: Optional[httpx.Response] = None
         attempts = 0
@@ -138,9 +148,18 @@ async def process(req: ProcessRequest):
                         media_type=resp.headers.get("content-type", "application/json"),
                     )
                 last_resp = resp  # retryable status -> loop again (still holding the slot)
-            except httpx.HTTPError:
+                if resp.status_code == 429:
+                    log.warning("downstream rate limited (429) on attempt %d/%d",
+                                attempt + 1, MAX_RETRIES + 1)
+                else:
+                    log.warning("downstream returned %d on attempt %d/%d",
+                                resp.status_code, attempt + 1, MAX_RETRIES + 1)
+            except httpx.HTTPError as exc:
                 last_resp = None
+                log.warning("downstream call failed (%s) on attempt %d/%d",
+                            type(exc).__name__, attempt + 1, MAX_RETRIES + 1)
             if attempt < MAX_RETRIES:
+                log.info("retry attempt %d after backoff", attempt + 2)
                 await asyncio.sleep((RETRY_BACKOFF_MS * (2 ** attempt)) / 1000.0)
 
         span.set_attribute("worker.retries", attempts - 1)
@@ -172,4 +191,5 @@ async def admin_config(cfg: ConfigRequest):
     if cfg.FALLBACK_ROUTING is not None:
         config_state["FALLBACK_ROUTING"] = cfg.FALLBACK_ROUTING
         changed["FALLBACK_ROUTING"] = cfg.FALLBACK_ROUTING
+    log.info("admin config updated: %s (pool now max=%d)", changed, pool.stats()["max"])
     return {"status": "updated", "changed": changed, "pool": pool.stats(), "config": config_state}
