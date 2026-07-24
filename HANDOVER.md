@@ -16,15 +16,24 @@ SigNoz/Docker setup. NOT the AI controller (team lead) or the control panel (tea
   `services/` folder with one subfolder per service, secrets are gitignored, and there is a
   `VERIFY.md` describing how to check each phase.
   *See for yourself:* run `git status` (clean) and `Get-ChildItem services` (four folders).
-
-Nothing is running yet — SigNoz and the services come online in Phase 1 onward.
+- **SigNoz is running locally (the whole observability backend).** One command deploys it
+  via SigNoz Foundry; all containers are healthy. This is where all telemetry will land.
+  *See for yourself:* open **http://localhost:8080** — the SigNoz UI loads (first time, it
+  asks you to create an admin account). No data in it yet; that starts in Phase 2.
+- **The SigNoz MCP server is up on port 8000** (the thing the AI controller talks to).
+  *See for yourself:* `docker logs signoz-mcp --tail 3` shows "Listening for MCP clients"
+  on `:8000`, endpoint `/mcp`. It still needs an API key to return data — see section 5.
 
 ## 2. What is not done
 
-- **Everything from Phase 1 onward** — SigNoz is not yet installed, no service is built, no
-  telemetry flows yet. This is expected; Phase 0 is only repo hygiene. See `PROGRESS.md`
-  for the exact per-phase status and the next action.
-  *Rough effort remaining:* the full build (Phases 1–8). Needed for the demo: all of it.
+- **The three microservices, load generator, and chaos engine (Phases 2–8)** are not built
+  yet — so right now SigNoz has no data flowing into it. See `PROGRESS.md` for exact
+  per-phase status and the next action.
+  *Rough effort remaining:* the full service build + instrumentation + chaos + packaging.
+  Needed for the demo: all of it.
+- **MCP has no API key yet**, so the AI controller can't query SigNoz through it until the
+  team lead generates one (SigNoz UI -> Settings -> API Keys) and supplies it to the MCP
+  container. ~10 min of work. Needed for the AI-controller demo.
 
 ## 7. Things someone should review or double-check
 
@@ -38,8 +47,18 @@ Nothing is running yet — SigNoz and the services come online in Phase 1 onward
   that matters to you.
 - **`.env` was previously committed** (empty). It is now untracked and gitignored so no
   secret can ever enter history. The local `.env` file is untouched.
-- **`casting.yaml` and `contracts.json` at the repo root are empty placeholders** that were
-  committed earlier. `casting.yaml` will be replaced by `deploy/casting.yaml` in Phase 1.
+- **`contracts.json` at the repo root is an empty placeholder** committed earlier. The old
+  empty root `casting.yaml` was removed in Phase 1 (the real one is `deploy/casting.yaml`).
+- **SigNoz runs on Docker Desktop, not WSL-native Docker.** SigNoz's docs recommend
+  WSL-native Docker Engine on Windows to avoid a ClickHouse Keeper segfault. We tried Docker
+  Desktop (faster) and it worked cleanly — 0 restarts, healthy. Worth re-checking on any
+  fresh machine or after a Docker Desktop update; the documented fallback is Docker Engine
+  inside a WSL2 Ubuntu distro.
+- **`foundryctl` details vs the original blueprint:** the blog example omitted `kind`, but
+  this version (v0.2.16) requires `kind: Installation`. MCP is a first-class Foundry
+  component (`spec.mcp.spec.enabled: true`), NOT a fully separate install as one doc page
+  implied. The generated `pours/` is gitignored; the resolved `casting.yaml.lock` is
+  committed so the exact stack is reproducible.
 
 ---
 

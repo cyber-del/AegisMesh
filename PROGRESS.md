@@ -7,7 +7,7 @@ action. Read this first at the start of every session, alongside `CLAUDE.md`
 | Phase | Status | Next action |
 |-------|--------|-------------|
 | 0 — Repo hygiene | **DONE** | — |
-| 1 — SigNoz running locally (Foundry + MCP) | NOT STARTED | Install foundryctl; write `deploy/casting.yaml` (Docker Compose mode, MCP enabled); bring up; CHECKPOINT 1 at http://localhost:8080 |
+| 1 — SigNoz running locally (Foundry + MCP) | **DONE** (backend verified; awaiting your CHECKPOINT 1 visual confirm) | Start Phase 2 once you confirm the UI at http://localhost:8080 |
 | 2 — ai-inference-service, one trace | NOT STARTED | Build FastAPI service on :8003 with OTLP gRPC export; find the trace in SigNoz (CHECKPOINT 2) |
 | 3 — Three connected services, one trace | NOT STARTED | Add api-gateway (:8001) + worker-queue (:8002); instrument outbound HTTP client so all 3 share one trace (CHECKPOINT 3) |
 | 4 — Logs correlated to traces | NOT STARTED | Export logs to SigNoz with trace_id/span_id; click-through from trace (CHECKPOINT 4) |
@@ -18,6 +18,14 @@ action. Read this first at the start of every session, alongside `CLAUDE.md`
 | 9 — Handover report | LIVING | Keep HANDOVER.md sections 1/2/7 current after every phase; full report at the end |
 
 ## Notes carried forward
+- **Phase 1 environment (decided 2026-07-24):** SigNoz runs on **Docker Desktop** (the
+  fast path), NOT WSL-native Docker. The ClickHouse Keeper segfault the SigNoz docs warn
+  about did NOT occur (0 restarts, healthy). If it ever starts crash-looping, the fallback
+  is native Docker Engine inside a WSL2 Ubuntu distro.
+- `foundryctl.exe v0.2.16` lives at `~/.local/bin/` (Git Bash). It is NOT on PATH by
+  default — prefix commands with `export PATH="$HOME/.local/bin:$PATH"`.
+- SigNoz stack is defined by `deploy/casting.yaml` (+ committed `casting.yaml.lock`).
+  Generated `pours/` is gitignored. MCP server enabled on :8000 (needs an API key to query).
 - Repo was flattened from a nested layout on 2026-07-24; real repo is now at
   `H:\AegisMesh` with remote `github.com/cyber-del/AegisMesh` (branch `main`).
 - `CLAUDE.md` is a **directory** containing `Context.md` (the project context). It is
