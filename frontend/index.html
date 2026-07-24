@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AegisMesh — Autonomous AI SRE</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#111c34; --panel2:#0b1428; --term:#020617;
+    --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --blue:#38bdf8;
+    --text:#e2e8f0; --muted:#64748b; --line:#1e293b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    display:flex; flex-direction:column; gap:16px;
+    min-height:100vh; padding:22px 26px;
+  }
+
+  /* ---- title ---- */
+  header{display:flex; align-items:baseline; gap:14px}
+  header h1{margin:0; font-size:26px; letter-spacing:.5px}
+  header h1 .mesh{color:var(--blue)}
+  header .sub{color:var(--muted); font-size:14px}
+  header .live{margin-left:auto; font-size:12px; color:var(--muted);
+    border:1px solid var(--line); border-radius:20px; padding:4px 12px}
+  header .live b{color:var(--green)}
+
+  /* ---- status banner ---- */
+  .banner{
+    border-radius:14px; padding:22px 26px; border:2px solid var(--line);
+    background:var(--panel); display:flex; align-items:center; gap:28px;
+    transition:border-color .5s ease, background-color .5s ease, box-shadow .5s ease;
+  }
+  .banner .status{font-size:30px; font-weight:700; letter-spacing:.3px; white-space:nowrap}
+  .banner .metrics{display:flex; gap:34px; margin-left:auto; flex-wrap:wrap}
+  .banner .metric{display:flex; flex-direction:column; gap:2px}
+  .banner .metric .k{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px}
+  .banner .metric .v{font-size:22px; font-weight:600; font-variant-numeric:tabular-nums}
+
+  .banner.disc{border-color:#334155; background:var(--panel)}
+  .banner.disc .status{color:#94a3b8}
+  .banner.green{border-color:var(--green); background:linear-gradient(90deg,rgba(34,197,94,.12),var(--panel)); box-shadow:0 0 0 1px rgba(34,197,94,.25)}
+  .banner.green .status{color:var(--green)}
+  .banner.red{border-color:var(--red); background:linear-gradient(90deg,rgba(239,68,68,.14),var(--panel)); box-shadow:0 0 0 1px rgba(239,68,68,.3)}
+  .banner.red .status{color:var(--red)}
+
+  /* ---- controls ---- */
+  .controls{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
+  button{
+    font:inherit; font-size:15px; font-weight:600; color:var(--text);
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:12px 18px; cursor:pointer; transition:background .15s, border-color .15s, transform .05s;
+  }
+  button:hover{border-color:#475569}
+  button:active{transform:translateY(1px)}
+  .btn-fault{border-color:#7f1d1d}
+  .btn-fault:hover{background:rgba(239,68,68,.12); border-color:var(--red)}
+  .toggle{margin-left:auto}
+  .toggle.on{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.08)}
+  .toggle.off{border-color:var(--amber); color:var(--amber); background:rgba(245,158,11,.08)}
+  .toggle.unknown{border-color:var(--line); color:var(--muted)}
+
+  /* ---- terminal ---- */
+  .terminal-wrap{flex:1; display:flex; flex-direction:column; min-height:220px}
+  .terminal-head{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px}
+  #terminal{
+    flex:1; background:var(--term); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; overflow-y:auto; font-family:"Cascadia Code",Consolas,monospace;
+    font-size:14px; line-height:1.55;
+  }
+  .log{white-space:pre-wrap; word-break:break-word; padding:1px 0}
+  .log.info{color:#cbd5e1}
+  .log.success{color:var(--green)}
+  .log.warning{color:var(--amber)}
+  .log.error{color:var(--red); font-weight:600}
+  .log.blocked{color:#fff; font-weight:700}
+  #terminal .placeholder{color:var(--muted); font-style:italic}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Aegis<span class="mesh">Mesh</span></h1>
+    <span class="sub">Autonomous AI SRE Controller</span>
+    <span class="live">CONTROL PANEL · <b>LIVE</b></span>
+  </header>
+
+  <section id="banner" class="banner disc">
+    <div class="status" id="statusText">● DISCONNECTED — waiting for controller</div>
+    <div class="metrics">
+      <div class="metric"><span class="k">Latency</span><span class="v" id="mLatency">—</span></div>
+      <div class="metric"><span class="k">Worker concurrency</span><span class="v" id="mConc">—</span></div>
+      <div class="metric"><span class="k">Guardrails</span><span class="v" id="mGuard">—</span></div>
+    </div>
+  </section>
+
+  <section class="controls">
+    <button class="btn-fault" id="btnLatency">Inject Latency Fault</button>
+    <button class="btn-fault" id="btnRatelimit">Inject Rate-Limit Fault</button>
+    <button class="toggle unknown" id="guardToggle">Guardrails: —</button>
+  </section>
+
+  <section class="terminal-wrap">
+    <div class="terminal-head">Controller activity — live stream</div>
+    <div id="terminal"><div class="placeholder">Waiting for controller log stream…</div></div>
+  </section>
+
+<script>
+  // ---- single point of configuration ----
+  var API_BASE = "http://localhost:8100";   // aegis-controller (NOT 8000 = SigNoz MCP)
+  var POLL_MS = 1000;
+
+  var bannerEl   = document.getElementById("banner");
+  var statusText = document.getElementById("statusText");
+  var mLatency   = document.getElementById("mLatency");
+  var mConc      = document.getElementById("mConc");
+  var mGuard     = document.getElementById("mGuard");
+  var termEl     = document.getElementById("terminal");
+  var btnLatency = document.getElementById("btnLatency");
+  var btnRate    = document.getElementById("btnRatelimit");
+  var guardBtn   = document.getElementById("guardToggle");
+
+  var guardrails = null;      // null = unknown until real status arrives
+  var placeholderShown = true;
+
+  function val(x){ return (x === null || x === undefined) ? "—" : x; }
+
+  // ---- status banner ----
+  function setDisconnected(){
+    bannerEl.className = "banner disc";
+    statusText.textContent = "● DISCONNECTED — waiting for controller";
+    mLatency.textContent = "—";
+    mConc.textContent = "—";
+    mGuard.textContent = "—";
+    guardrails = null;
+    updateGuardToggle();
+  }
+
+  function renderStatus(d){
+    if(d.status === "GREEN"){
+      bannerEl.className = "banner green";
+      statusText.textContent = "● GREEN — system healthy";
+    } else if(d.status === "RED"){
+      bannerEl.className = "banner red";
+      statusText.textContent = "● RED — incident" + (d.active_fault ? "  ·  fault: " + d.active_fault : "");
+    } else {
+      setDisconnected();
+      return;
+    }
+    mLatency.textContent = val(d.latency_ms) + (d.latency_ms === null || d.latency_ms === undefined ? "" : " ms");
+    mConc.textContent    = val(d.active_worker_concurrency);
+    guardrails = (d.guardrails_enabled === true);
+    mGuard.textContent   = guardrails ? "ON" : "OFF";
+    updateGuardToggle();
+  }
+
+  function pollStatus(){
+    fetch(API_BASE + "/api/status", {cache:"no-store"})
+      .then(function(r){ if(!r.ok){ throw new Error("HTTP " + r.status); } return r.json(); })
+      .then(function(d){ renderStatus(d); })
+      .catch(function(){ setDisconnected(); });
+  }
+
+  // ---- guardrails toggle ----
+  function updateGuardToggle(){
+    if(guardrails === null){ guardBtn.textContent = "Guardrails: —"; guardBtn.className = "toggle unknown"; return; }
+    guardBtn.textContent = guardrails ? "Guardrails: ON — protected" : "Guardrails: OFF — unprotected";
+    guardBtn.className = "toggle " + (guardrails ? "on" : "off");
+  }
+
+  function toggleGuardrails(){
+    var next = !(guardrails === true);
+    fetch(API_BASE + "/api/guardrails/toggle", {
+      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({enabled: next})
+    }).catch(function(e){
+      appendLog({timestamp:new Date().toISOString(), stage:"UI", message:"guardrail toggle failed — backend unreachable", level:"ERROR"});
+    });
+    // do not fake the new state; the next /api/status poll confirms it.
+  }
+
+  // ---- chaos inject ----
+  function inject(fault){
+    fetch(API_BASE + "/api/chaos/inject", {
+      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({fault: fault})
+    }).catch(function(e){
+      appendLog({timestamp:new Date().toISOString(), stage:"UI", message:"inject '"+fault+"' failed — backend unreachable", level:"ERROR"});
+    });
+  }
+
+  // ---- live terminal (SSE) ----
+  function appendLog(ev){
+    if(placeholderShown){ termEl.innerHTML = ""; placeholderShown = false; }
+    var line = document.createElement("div");
+    var level = (ev.level || "INFO").toLowerCase();
+    line.className = "log " + level;
+    var ts = (ev.timestamp || "").replace("T", " ").replace("Z", "");
+    var stage = ev.stage ? "[" + ev.stage + "] " : "";
+    var badge = (ev.level === "BLOCKED") ? "🛑 " : "";
+    line.textContent = ts + "  " + badge + stage + (ev.message || "");
+    termEl.appendChild(line);
+    termEl.scrollTop = termEl.scrollHeight;
+  }
+
+  var es = null;
+  function connectStream(){
+    try{ if(es){ es.close(); } }catch(e){}
+    es = new EventSource(API_BASE + "/api/logs/stream");
+    es.onmessage = function(m){
+      var ev;
+      try{ ev = JSON.parse(m.data); }catch(e){ return; }
+      if(ev.stage === "HEARTBEAT"){ return; }   // ignore keep-alives
+      appendLog(ev);
+    };
+    es.onerror = function(){ /* EventSource auto-reconnects on its own */ };
+  }
+
+  // ---- wire up ----
+  btnLatency.onclick = function(){ inject("latency"); };
+  btnRate.onclick    = function(){ inject("ratelimit"); };
+  guardBtn.onclick   = toggleGuardrails;
+
+  // ---- boot: start DISCONNECTED, then let real data drive everything ----
+  setDisconnected();
+  connectStream();
+  pollStatus();
+  setInterval(pollStatus, POLL_MS);
+</script>
+</body>
+</html>

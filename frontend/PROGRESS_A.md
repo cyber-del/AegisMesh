@@ -3,13 +3,13 @@
 One line per phase. Read this first at the start of every session, with `CLAUDE.md`,
 `HANDOVER_A.md`, and `git log --oneline -15`. Committed/tracked (never gitignored).
 
-**RESUME HERE:** Phase 1 — build `frontend/index.html`.
+**RESUME HERE:** Phase 2 — guardrail BLOCKED emphasis + toggle state polish in `index.html`.
 
 | Phase | Status | Next action |
 |-------|--------|-------------|
 | 0 — Lock API contract + mock it | **DONE** | contract drafted (lead must confirm fault strings + CORS); mock on :8100 |
-| 1 — Panel driven by real/mock data | NOT STARTED | build index.html: banner polls /api/status, SSE terminal, DISCONNECTED default |
-| 2 — Two faults + guardrail moment | NOT STARTED | two inject buttons; BLOCKED styling; guardrails toggle state |
+| 1 — Panel driven by real/mock data | **DONE** | index.html built; self-check: DISCONNECTED default, no hardcoded health, endpoints wired, JS balanced |
+| 2 — Two faults + guardrail moment | NOT STARTED | make BLOCKED unmissable (flash/pinned alert); toggle ON/OFF visual; surface active_fault |
 | 3 — Real backend swap + polish | NOT STARTED | base URL const -> :8100; 1080p polish; verify DISCONNECTED + JS syntax |
 | 4 — Handover report | NOT STARTED | write HANDOVER_A.md |
 
