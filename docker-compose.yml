@@ -1,0 +1,101 @@
+# AegisMesh services + load generator, wired to the self-hosted SigNoz collector.
+#
+# Prereq: SigNoz must already be running (deploy/casting.yaml -> foundryctl), which creates
+# the external `signoz-network` and the collector alias `signoz-ingester`. Then:
+#   docker compose up -d --build
+#
+# Ports published to the host so you / the AI controller can drive them:
+#   8001 api-gateway · 8002 worker-queue · 8003 ai-inference-service
+# Internal service-to-service and OTLP traffic stays on signoz-network by DNS name.
+# Healthchecks + service_healthy dependencies gate startup so nothing hammers a
+# not-yet-ready upstream (no startup-race errors).
+name: aegismesh
+
+networks:
+  signoz-network:
+    external: true
+    name: signoz-network
+
+x-healthcheck-common: &hc
+  interval: 5s
+  timeout: 3s
+  retries: 10
+  start_period: 5s
+
+services:
+  ai-inference:
+    build: ./services/ai-inference-service
+    container_name: aegis-ai-inference
+    environment:
+      OTEL_SERVICE_NAME: ai-inference-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester:4317
+      MODEL_NAME: aegis-sim-1
+      INFER_BASE_LATENCY_MS: "150"
+      CHAOS_LATENCY_MIN_S: "3.0"
+      CHAOS_LATENCY_MAX_S: "5.0"
+      CHAOS_RATELIMIT_CAPACITY: "1"
+      DEPLOYMENT_ENV: hackathon
+    ports:
+      - "8003:8003"
+    networks: [signoz-network]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/health').status==200 else 1)"]
+      <<: *hc
+    restart: unless-stopped
+
+  worker-queue:
+    build: ./services/worker-queue
+    container_name: aegis-worker-queue
+    environment:
+      OTEL_SERVICE_NAME: worker-queue
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester:4317
+      AI_INFERENCE_URL: http://ai-inference:8003
+      MAX_WORKER_CONCURRENCY: "5"
+      MAX_RETRIES: "3"
+      RETRY_BACKOFF_MS: "500"
+      DOWNSTREAM_TIMEOUT_MS: "10000"
+      DEPLOYMENT_ENV: hackathon
+    ports:
+      - "8002:8002"
+    networks: [signoz-network]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/health').status==200 else 1)"]
+      <<: *hc
+    depends_on:
+      ai-inference:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: aegis-api-gateway
+    environment:
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://signoz-ingester:4317
+      WORKER_QUEUE_URL: http://worker-queue:8002
+      GATEWAY_TIMEOUT_MS: "5000"
+      DEPLOYMENT_ENV: hackathon
+    ports:
+      - "8001:8001"
+    networks: [signoz-network]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status==200 else 1)"]
+      <<: *hc
+    depends_on:
+      worker-queue:
+        condition: service_healthy
+    restart: unless-stopped
+
+  load-generator:
+    build: ./services/load-generator
+    container_name: aegis-load-generator
+    environment:
+      TARGET_URL: http://api-gateway:8001/v1/generate
+      CONCURRENCY: "15"
+      LOADGEN_MAX_TOKENS: "64"
+      REPORT_EVERY_S: "5"
+    networks: [signoz-network]
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
