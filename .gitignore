@@ -20,3 +20,11 @@ pours/
 
 # Logs
 *.log
+
+# settings 
+.claude
+
+# FILES
+HANDOVER.md
+PROGRESS.md
+VERIFY.md
