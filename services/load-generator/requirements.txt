@@ -1,0 +1,3 @@
+# load-generator — just an async HTTP client hammering api-gateway.
+# Deliberately NOT OTel-instrumented, so api-gateway stays the trace root.
+httpx
