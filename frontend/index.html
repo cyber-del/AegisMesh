@@ -76,11 +76,30 @@
   .log.success{color:var(--green)}
   .log.warning{color:var(--amber)}
   .log.error{color:var(--red); font-weight:600}
-  .log.blocked{color:#fff; font-weight:700}
+  .log.blocked{
+    color:#fff; font-weight:800; font-size:15px; letter-spacing:.2px;
+    background:linear-gradient(90deg,rgba(239,68,68,.38),rgba(245,158,11,.16));
+    border-left:4px solid var(--red); border-radius:6px;
+    padding:8px 12px; margin:6px 0; box-shadow:0 0 0 1px rgba(239,68,68,.4);
+  }
   #terminal .placeholder{color:var(--muted); font-style:italic}
+
+  /* the guardrail-block moment: a pinned alert that pops so it can't scroll away */
+  #blockAlert{
+    position:fixed; top:18px; left:50%; z-index:50;
+    transform:translateX(-50%) translateY(-26px);
+    background:linear-gradient(90deg,#7f1d1d,#b45309); color:#fff;
+    font-weight:800; font-size:18px; letter-spacing:.3px; text-align:center;
+    padding:16px 26px; border-radius:14px; border:2px solid #fca5a5;
+    box-shadow:0 12px 44px rgba(0,0,0,.55); max-width:82vw;
+    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+  }
+  #blockAlert.show{opacity:1; transform:translateX(-50%) translateY(0); animation:blockpulse 1s ease-out}
+  @keyframes blockpulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.75)}100%{box-shadow:0 12px 44px rgba(0,0,0,.55)}}
 </style>
 </head>
 <body>
+  <div id="blockAlert">🛑 GUARDRAIL BLOCKED A DANGEROUS ACTION</div>
   <header>
     <h1>Aegis<span class="mesh">Mesh</span></h1>
     <span class="sub">Autonomous AI SRE Controller</span>
@@ -121,6 +140,8 @@
   var btnLatency = document.getElementById("btnLatency");
   var btnRate    = document.getElementById("btnRatelimit");
   var guardBtn   = document.getElementById("guardToggle");
+  var blockAlert = document.getElementById("blockAlert");
+  var blockTimer = null;
 
   var guardrails = null;      // null = unknown until real status arrives
   var placeholderShown = true;
@@ -189,6 +210,15 @@
     });
   }
 
+  // the guardrail block is the demo's key moment — pop a pinned alert so it can't scroll away.
+  // (Driven ONLY by a real BLOCKED event from the stream; the timer just dismisses the visual.)
+  function showBlockAlert(msg){
+    blockAlert.textContent = "🛑 GUARDRAIL BLOCKED — " + (msg || "dangerous action denied");
+    blockAlert.classList.add("show");
+    if(blockTimer){ clearTimeout(blockTimer); }
+    blockTimer = setTimeout(function(){ blockAlert.classList.remove("show"); }, 6000);
+  }
+
   // ---- live terminal (SSE) ----
   function appendLog(ev){
     if(placeholderShown){ termEl.innerHTML = ""; placeholderShown = false; }
@@ -201,6 +231,7 @@
     line.textContent = ts + "  " + badge + stage + (ev.message || "");
     termEl.appendChild(line);
     termEl.scrollTop = termEl.scrollHeight;
+    if(ev.level === "BLOCKED"){ showBlockAlert(ev.message); }
   }
 
   var es = null;
