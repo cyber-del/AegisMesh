@@ -3,7 +3,8 @@
 One line per phase. Read this first at the start of every session, with `CLAUDE.md`,
 `HANDOVER_A.md`, and `git log --oneline -15`. Committed/tracked (never gitignored).
 
-**RESUME HERE:** Phase 4 — write `frontend/HANDOVER_A.md` (final).
+**RESUME HERE:** ALL PHASES 0–4 DONE. Awaiting: human browser eyeball + real-backend test
+once the lead's controller is up on :8100. Nothing pushed (V. Abhishek Prakash pushes).
 
 | Phase | Status | Next action |
 |-------|--------|-------------|
@@ -11,7 +12,7 @@ One line per phase. Read this first at the start of every session, with `CLAUDE.
 | 1 — Panel driven by real/mock data | **DONE** | index.html built; self-check: DISCONNECTED default, no hardcoded health, endpoints wired, JS balanced |
 | 2 — Two faults + guardrail moment | **DONE** | two inject buttons POST latency/ratelimit; BLOCKED gets bold inline style + pinned #blockAlert; toggle shows ON-protected/OFF-unprotected; active_fault surfaced in RED banner |
 | 3 — Real backend swap + polish | **DONE** | API_BASE single const on :8100 (mock+real share it); 1080p sizing + smooth colour transition; self-check: comment/string-aware JS balance PASS, DISCONNECTED default confirmed |
-| 4 — Handover report | NOT STARTED | write HANDOVER_A.md |
+| 4 — Handover report | **DONE** | HANDOVER_A.md written (5 sections incl. demo runbook + guardrail-BLOCK money shot) |
 
 ## Notes carried forward
 - Scope: `frontend/` ONLY. Single-file vanilla `index.html` (no React/Vite/build). Backend at
