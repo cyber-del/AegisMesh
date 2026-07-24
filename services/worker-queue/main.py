@@ -13,7 +13,9 @@ genuine resource exhaustion.
 Instrumented with FastAPI (server span) + httpx (client span, propagates context onward).
 """
 import asyncio
+import json
 import os
+import random
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -30,8 +32,12 @@ from telemetry import configure_telemetry
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "worker-queue")
 AI_INFERENCE_URL = os.getenv("AI_INFERENCE_URL", "http://localhost:8003")
 MAX_WORKER_CONCURRENCY = int(os.getenv("MAX_WORKER_CONCURRENCY", "5"))
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
-RETRY_BACKOFF_MS = int(os.getenv("RETRY_BACKOFF_MS", "200"))
+# Retry-with-backoff on downstream 429/5xx. The backoff is deliberately substantial: a
+# retrying request keeps holding its pool slot, so under the rate-limit fault (Fault B)
+# the pool saturates and the cascade reaches api-gateway as 504s (not just passed-through
+# 429s). Healthy traffic and Fault A never retry, so this only shapes the failure path.
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", "3"))
+RETRY_BACKOFF_MS = int(os.getenv("RETRY_BACKOFF_MS", "500"))
 DOWNSTREAM_TIMEOUT_MS = int(os.getenv("DOWNSTREAM_TIMEOUT_MS", "10000"))
 
 tracer, log, _meter = configure_telemetry(SERVICE_NAME)
@@ -114,6 +120,19 @@ def _retryable(status_code: int) -> bool:
     return status_code == 429 or status_code >= 500
 
 
+def _fallback_response(req: "ProcessRequest") -> Response:
+    """A cheap, downstream-free 200. Used to shed load off a rate-limited backend."""
+    body = json.dumps({
+        "model": "fallback",
+        "generated_text": "[degraded] fallback response (downstream load-shed)",
+        "input_tokens": max(1, len(req.prompt) // 4),
+        "output_tokens": 0,
+        "latency_ms": 0,
+        "fallback": True,
+    })
+    return Response(content=body, status_code=200, media_type="application/json")
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": SERVICE_NAME, "pool": pool.stats(), "config": config_state}
@@ -123,6 +142,16 @@ def health():
 async def process(req: ProcessRequest):
     span = trace.get_current_span()
     log.info("process request received (prompt_chars=%d)", len(req.prompt))
+
+    # Fault-B remediation (controller-set): shed load off the downstream BEFORE taking a
+    # pool slot. FALLBACK_ROUTING sheds everything; LLM_SAMPLING_RATE<1 sheds a fraction.
+    # This is the CORRECT fix for the rate-limit fault and the WRONG one for latency.
+    if config_state["FALLBACK_ROUTING"] or random.random() > config_state["LLM_SAMPLING_RATE"]:
+        span.set_attribute("worker.fallback", True)
+        log.info("serving fallback (sampling_rate=%.2f fallback_routing=%s) — downstream skipped",
+                 config_state["LLM_SAMPLING_RATE"], config_state["FALLBACK_ROUTING"])
+        return _fallback_response(req)
+
     waited = await pool.acquire()  # occupy a slot for the whole request, retries included
     stats = pool.stats()
     span.set_attribute("worker.pool.active", stats["active"])
