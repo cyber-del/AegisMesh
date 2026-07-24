@@ -34,7 +34,7 @@ MAX_RETRIES = int(os.getenv("MAX_RETRIES", "2"))
 RETRY_BACKOFF_MS = int(os.getenv("RETRY_BACKOFF_MS", "200"))
 DOWNSTREAM_TIMEOUT_MS = int(os.getenv("DOWNSTREAM_TIMEOUT_MS", "10000"))
 
-tracer, log = configure_telemetry(SERVICE_NAME)
+tracer, log, _meter = configure_telemetry(SERVICE_NAME)
 HTTPXClientInstrumentor().instrument()
 
 

@@ -24,6 +24,11 @@ from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 
+from opentelemetry import metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+
 
 def _resource(service_name: str) -> Resource:
     # service.name is the field SigNoz groups by; string keys avoid coupling to a moving
@@ -38,7 +43,10 @@ def _resource(service_name: str) -> Resource:
 
 
 def configure_telemetry(service_name: str):
-    """Set up trace + log export to SigNoz over OTLP/gRPC. Returns (tracer, logger)."""
+    """Set up trace + log + metric export to SigNoz over OTLP/gRPC.
+
+    Returns (tracer, logger, meter).
+    """
     endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
     resource = _resource(service_name)
 
@@ -48,6 +56,15 @@ def configure_telemetry(service_name: str):
         BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
     )
     trace.set_tracer_provider(tracer_provider)
+
+    # --- metrics --- (short export interval so they show up quickly in the demo)
+    interval_ms = int(os.getenv("OTEL_METRIC_EXPORT_INTERVAL_MS", "10000"))
+    reader = PeriodicExportingMetricReader(
+        OTLPMetricExporter(endpoint=endpoint, insecure=True),
+        export_interval_millis=interval_ms,
+    )
+    meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
+    metrics.set_meter_provider(meter_provider)
 
     # --- logs --- (the separate export path; without this, IDs go nowhere)
     logger_provider = LoggerProvider(resource=resource)
@@ -66,4 +83,4 @@ def configure_telemetry(service_name: str):
     app_logger.addHandler(console)       # -> local stdout, for debugging
     app_logger.propagate = False
 
-    return trace.get_tracer(service_name), app_logger
+    return trace.get_tracer(service_name), app_logger, metrics.get_meter(service_name)

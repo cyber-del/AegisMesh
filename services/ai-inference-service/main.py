@@ -25,7 +25,16 @@ MODEL_NAME = os.getenv("MODEL_NAME", "aegis-sim-1")
 # Baseline per-request latency. Phase 7 Fault A will inflate this to 3-5s at runtime.
 BASE_LATENCY_MS = int(os.getenv("INFER_BASE_LATENCY_MS", "150"))
 
-tracer, log = configure_telemetry(SERVICE_NAME)
+tracer, log, meter = configure_telemetry(SERVICE_NAME)
+
+# GenAI semantic-convention token metric: a histogram, with input vs output on the
+# gen_ai.token.type attribute. Labels are bounded (token.type in {input,output};
+# request.model is a small fixed set); service.name rides on the Resource, not a label.
+token_usage = meter.create_histogram(
+    name="gen_ai.client.token.usage",
+    unit="{token}",
+    description="Number of input and output tokens used per GenAI request",
+)
 
 app = FastAPI(title="AegisMesh ai-inference-service", version="0.1.0")
 # Auto-instrument inbound HTTP: creates the server span for every request.
@@ -76,6 +85,11 @@ async def infer(req: InferRequest):
         span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
         span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
         span.set_attribute("gen_ai.prompt.length_chars", len(req.prompt))
+
+        # Aggregate metric (bounded labels only) — the per-request counts above stay on
+        # the span; here we only record the numbers against token.type + model.
+        token_usage.record(input_tokens, {"gen_ai.token.type": "input", "gen_ai.request.model": MODEL_NAME})
+        token_usage.record(output_tokens, {"gen_ai.token.type": "output", "gen_ai.request.model": MODEL_NAME})
 
     latency_ms = int((time.perf_counter() - start) * 1000)
     return InferResponse(

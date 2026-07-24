@@ -26,7 +26,7 @@ SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "api-gateway")
 WORKER_QUEUE_URL = os.getenv("WORKER_QUEUE_URL", "http://localhost:8002")
 GATEWAY_TIMEOUT_MS = int(os.getenv("GATEWAY_TIMEOUT_MS", "5000"))
 
-_, log = configure_telemetry(SERVICE_NAME)
+_, log, _meter = configure_telemetry(SERVICE_NAME)
 HTTPXClientInstrumentor().instrument()  # traces + propagates context on all httpx calls
 
 # One shared async client; the 5s timeout is the whole point of this service.
