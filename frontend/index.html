@@ -34,7 +34,7 @@
     background:var(--panel); display:flex; align-items:center; gap:28px;
     transition:border-color .5s ease, background-color .5s ease, box-shadow .5s ease;
   }
-  .banner .status{font-size:30px; font-weight:700; letter-spacing:.3px; white-space:nowrap}
+  .banner .status{font-size:32px; font-weight:700; letter-spacing:.3px; white-space:nowrap; transition:color .5s ease}
   .banner .metrics{display:flex; gap:34px; margin-left:auto; flex-wrap:wrap}
   .banner .metric{display:flex; flex-direction:column; gap:2px}
   .banner .metric .k{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px}
@@ -69,7 +69,7 @@
   #terminal{
     flex:1; background:var(--term); border:1px solid var(--line); border-radius:12px;
     padding:14px 16px; overflow-y:auto; font-family:"Cascadia Code",Consolas,monospace;
-    font-size:14px; line-height:1.55;
+    font-size:15px; line-height:1.6;
   }
   .log{white-space:pre-wrap; word-break:break-word; padding:1px 0}
   .log.info{color:#cbd5e1}
@@ -128,7 +128,10 @@
 
 <script>
   // ---- single point of configuration ----
-  var API_BASE = "http://localhost:8100";   // aegis-controller (NOT 8000 = SigNoz MCP)
+  // THE ONE LINE TO CHANGE to point at a different backend. The mock (mock_server.py) and
+  // the real aegis-controller both listen here on :8100, so switching = run the real one.
+  // Never 8000 (the SigNoz MCP server).
+  var API_BASE = "http://localhost:8100";
   var POLL_MS = 1000;
 
   var bannerEl   = document.getElementById("banner");

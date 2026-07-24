@@ -3,14 +3,14 @@
 One line per phase. Read this first at the start of every session, with `CLAUDE.md`,
 `HANDOVER_A.md`, and `git log --oneline -15`. Committed/tracked (never gitignored).
 
-**RESUME HERE:** Phase 3 — point base URL at :8100 (done), polish for 1080p, verify DISCONNECTED.
+**RESUME HERE:** Phase 4 — write `frontend/HANDOVER_A.md` (final).
 
 | Phase | Status | Next action |
 |-------|--------|-------------|
 | 0 — Lock API contract + mock it | **DONE** | contract drafted (lead must confirm fault strings + CORS); mock on :8100 |
 | 1 — Panel driven by real/mock data | **DONE** | index.html built; self-check: DISCONNECTED default, no hardcoded health, endpoints wired, JS balanced |
 | 2 — Two faults + guardrail moment | **DONE** | two inject buttons POST latency/ratelimit; BLOCKED gets bold inline style + pinned #blockAlert; toggle shows ON-protected/OFF-unprotected; active_fault surfaced in RED banner |
-| 3 — Real backend swap + polish | NOT STARTED | base URL const -> :8100; 1080p polish; verify DISCONNECTED + JS syntax |
+| 3 — Real backend swap + polish | **DONE** | API_BASE single const on :8100 (mock+real share it); 1080p sizing + smooth colour transition; self-check: comment/string-aware JS balance PASS, DISCONNECTED default confirmed |
 | 4 — Handover report | NOT STARTED | write HANDOVER_A.md |
 
 ## Notes carried forward
