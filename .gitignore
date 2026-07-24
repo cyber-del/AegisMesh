@@ -1,0 +1,22 @@
+# Local AI context — never commit
+CLAUDE.md
+
+# Environment / secrets — never commit real env files, but DO keep the template
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+
+# Node (control panel deps, if ever installed here)
+node_modules/
+
+# SigNoz Foundry generated output
+pours/
+
+# Logs
+*.log
