@@ -53,11 +53,10 @@ chaos_state = {
     "latency_min_s": float(os.getenv("CHAOS_LATENCY_MIN_S", "3.0")),
     "latency_max_s": float(os.getenv("CHAOS_LATENCY_MAX_S", "5.0")),
     "ratelimit": False,
-    # Max concurrent inferences allowed under the rate-limit fault; excess -> 429. Default 1
-    # (severe) so the cascade reaches api-gateway as 504s at the steady ~15-concurrent load.
     "capacity": int(os.getenv("CHAOS_RATELIMIT_CAPACITY", "1")),
+    "sampling_rate": 100
 }
-_inflight = 0  # current concurrent inferences (single event loop -> no lock needed)
+_inflight = 0  # current concurrent inferences
 
 app = FastAPI(title="AegisMesh ai-inference-service", version="0.1.0")
 FastAPIInstrumentor.instrument_app(app)
@@ -85,6 +84,11 @@ class RateLimitChaos(BaseModel):
     capacity: Optional[int] = None
 
 
+class ConfigRequest(BaseModel):
+    LLM_SAMPLING_RATE: Optional[int] = None
+    capacity: Optional[int] = None
+
+
 def estimate_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
@@ -103,7 +107,6 @@ async def infer(req: InferRequest):
     cap = min(req.max_tokens or 128, 512)
     span = trace.get_current_span()
 
-    # --- Fault B: capacity-limited rate limit. Reject fast (no work) when over capacity. ---
     if chaos_state["ratelimit"] and _inflight >= chaos_state["capacity"]:
         span.set_attribute("error.type", "RateLimitError")
         span.set_attribute("gen_ai.response.finish_reason", "rate_limit")
@@ -116,7 +119,6 @@ async def infer(req: InferRequest):
     log.info("inference request received (input_tokens=%d, max_tokens=%d)", input_tokens, cap)
     try:
         with tracer.start_as_current_span("llm.generate") as gen_span:
-            # --- Fault A: injected latency. Still succeeds; still parallel-capable. ---
             if chaos_state["latency"]:
                 delay_s = random.uniform(chaos_state["latency_min_s"], chaos_state["latency_max_s"])
             else:
@@ -145,12 +147,22 @@ async def infer(req: InferRequest):
     )
 
 
-# --------------------------------------------------------------------------------------
-# Chaos control plane
-# --------------------------------------------------------------------------------------
+@app.post("/admin/config")
+async def admin_config(cfg: ConfigRequest):
+    """Live-reconfigure the AI inference service without restarts."""
+    changed = {}
+    if cfg.capacity is not None:
+        chaos_state["capacity"] = cfg.capacity
+        changed["capacity"] = cfg.capacity
+    if cfg.LLM_SAMPLING_RATE is not None:
+        chaos_state["sampling_rate"] = cfg.LLM_SAMPLING_RATE
+        changed["LLM_SAMPLING_RATE"] = cfg.LLM_SAMPLING_RATE
+    log.info("admin config updated on ai-inference-service: %s", changed)
+    return {"status": "updated", "changed": changed, "chaos": chaos_state}
+
+
 @app.post("/chaos/inject-latency")
 async def inject_latency(cfg: Optional[LatencyChaos] = None):
-    """Fault A: make inference slow (3-5s by default) but still successful."""
     chaos_state["latency"] = True
     if cfg:
         if cfg.min_s is not None:
@@ -164,7 +176,6 @@ async def inject_latency(cfg: Optional[LatencyChaos] = None):
 
 @app.post("/chaos/inject-token-ratelimit")
 async def inject_token_ratelimit(cfg: Optional[RateLimitChaos] = None):
-    """Fault B: reject with 429/TokenQuotaExceeded once in-flight exceeds capacity."""
     chaos_state["ratelimit"] = True
     if cfg and cfg.capacity is not None:
         chaos_state["capacity"] = cfg.capacity
@@ -174,7 +185,6 @@ async def inject_token_ratelimit(cfg: Optional[RateLimitChaos] = None):
 
 @app.post("/chaos/reset")
 async def chaos_reset():
-    """Clear all faults."""
     chaos_state["latency"] = False
     chaos_state["ratelimit"] = False
     log.warning("CHAOS reset — all faults cleared")

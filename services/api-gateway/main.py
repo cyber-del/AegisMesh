@@ -48,9 +48,26 @@ class GenerateRequest(BaseModel):
     max_tokens: Optional[int] = 128
 
 
+class ConfigRequest(BaseModel):
+    GATEWAY_TIMEOUT_MS: Optional[int] = None
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": SERVICE_NAME}
+    return {"status": "ok", "service": SERVICE_NAME, "timeout_ms": GATEWAY_TIMEOUT_MS}
+
+
+@app.post("/admin/config")
+async def admin_config(cfg: ConfigRequest):
+    """Live-reconfigure the API Gateway timeout without restarts."""
+    global GATEWAY_TIMEOUT_MS, client
+    changed = {}
+    if cfg.GATEWAY_TIMEOUT_MS is not None:
+        GATEWAY_TIMEOUT_MS = cfg.GATEWAY_TIMEOUT_MS
+        client.timeout = httpx.Timeout(GATEWAY_TIMEOUT_MS / 1000.0)
+        changed["GATEWAY_TIMEOUT_MS"] = GATEWAY_TIMEOUT_MS
+    log.info("admin config updated on api-gateway: %s", changed)
+    return {"status": "updated", "changed": changed, "timeout_ms": GATEWAY_TIMEOUT_MS}
 
 
 @app.post("/v1/generate")
@@ -59,7 +76,6 @@ async def generate(req: GenerateRequest):
     try:
         resp = await client.post(f"{WORKER_QUEUE_URL}/v1/process", json=req.model_dump())
     except httpx.TimeoutException:
-        # The failure the demo cares about: downstream took longer than our budget.
         log.warning("gateway timeout: downstream exceeded %dms budget -> 504", GATEWAY_TIMEOUT_MS)
         return Response(
             content='{"error":"upstream timeout at api-gateway","code":"gateway_timeout"}',
@@ -73,7 +89,6 @@ async def generate(req: GenerateRequest):
             status_code=502,
             media_type="application/json",
         )
-    # Pass the worker-queue response straight through, preserving its status code.
     return Response(
         content=resp.content,
         status_code=resp.status_code,

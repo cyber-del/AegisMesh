@@ -1,9 +1,7 @@
 # ai-inference-service — FastAPI + OpenTelemetry (OTLP gRPC -> SigNoz :4317)
-# OTel versions pinned to a same-day-released, compatible set (verified 2026-07-24):
-#   core (api/sdk/exporter) = 1.44.0   |   contrib (instrumentation) = 0.65b0
 fastapi
 uvicorn[standard]
-opentelemetry-api==1.44.0
-opentelemetry-sdk==1.44.0
-opentelemetry-exporter-otlp-proto-grpc==1.44.0
-opentelemetry-instrumentation-fastapi==0.65b0
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp-proto-grpc>=1.20.0
+opentelemetry-instrumentation-fastapi>=0.40b0

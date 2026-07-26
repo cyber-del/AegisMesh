@@ -1,0 +1,12 @@
+{
+  "status": "GREEN",
+  "latency_ms": 120,
+  "token_usage_rate": 136,
+  "active_worker_concurrency": 50,
+  "guardrails_enabled": true,
+  "active_fault": null,
+  "last_healing_event": {
+    "healed_at": "21:53:47",
+    "duration_sec": 8.63
+  }
+}

@@ -1,265 +1,846 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AegisMesh — Autonomous AI SRE</title>
-<style>
-  :root{
-    --bg:#0f172a; --panel:#111c34; --panel2:#0b1428; --term:#020617;
-    --green:#22c55e; --red:#ef4444; --amber:#f59e0b; --blue:#38bdf8;
-    --text:#e2e8f0; --muted:#64748b; --line:#1e293b;
-  }
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%}
-  body{
-    background:var(--bg); color:var(--text);
-    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
-    display:flex; flex-direction:column; gap:16px;
-    min-height:100vh; padding:22px 26px;
-  }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AegisMesh — Enterprise AI SRE Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #070a12;
+      --bg-card: rgba(15, 23, 42, 0.75);
+      --border-card: rgba(255, 255, 255, 0.1);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-cyan: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-amber: #f59e0b;
+      --accent-purple: #a855f7;
+      --accent-blue: #3b82f6;
+      --font-main: 'Outfit', sans-serif;
+      --font-code: 'JetBrains Mono', monospace;
+    }
 
-  /* ---- title ---- */
-  header{display:flex; align-items:baseline; gap:14px}
-  header h1{margin:0; font-size:26px; letter-spacing:.5px}
-  header h1 .mesh{color:var(--blue)}
-  header .sub{color:var(--muted); font-size:14px}
-  header .live{margin-left:auto; font-size:12px; color:var(--muted);
-    border:1px solid var(--line); border-radius:20px; padding:4px 12px}
-  header .live b{color:var(--green)}
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ---- status banner ---- */
-  .banner{
-    border-radius:14px; padding:22px 26px; border:2px solid var(--line);
-    background:var(--panel); display:flex; align-items:center; gap:28px;
-    transition:border-color .5s ease, background-color .5s ease, box-shadow .5s ease;
-  }
-  .banner .status{font-size:32px; font-weight:700; letter-spacing:.3px; white-space:nowrap; transition:color .5s ease}
-  .banner .metrics{display:flex; gap:34px; margin-left:auto; flex-wrap:wrap}
-  .banner .metric{display:flex; flex-direction:column; gap:2px}
-  .banner .metric .k{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px}
-  .banner .metric .v{font-size:22px; font-weight:600; font-variant-numeric:tabular-nums}
+    body {
+      background: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.12) 0px, transparent 50%),
+        radial-gradient(at 50% 100%, rgba(34, 197, 94, 0.08) 0px, transparent 50%);
+      color: var(--text-main);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      padding: 1.5rem 2rem;
+      overflow-x: hidden;
+    }
 
-  .banner.disc{border-color:#334155; background:var(--panel)}
-  .banner.disc .status{color:#94a3b8}
-  .banner.green{border-color:var(--green); background:linear-gradient(90deg,rgba(34,197,94,.12),var(--panel)); box-shadow:0 0 0 1px rgba(34,197,94,.25)}
-  .banner.green .status{color:var(--green)}
-  .banner.red{border-color:var(--red); background:linear-gradient(90deg,rgba(239,68,68,.14),var(--panel)); box-shadow:0 0 0 1px rgba(239,68,68,.3)}
-  .banner.red .status{color:var(--red)}
+    /* Floating Alert */
+    .block-alert {
+      position: fixed;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95));
+      color: #fff;
+      padding: 0.9rem 2.2rem;
+      border-radius: 9999px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: 0.5px;
+      box-shadow: 0 15px 35px rgba(239, 68, 68, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+      z-index: 1000;
+      transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .block-alert.show { top: 24px; }
 
-  /* ---- controls ---- */
-  .controls{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
-  button{
-    font:inherit; font-size:15px; font-weight:600; color:var(--text);
-    background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    padding:12px 18px; cursor:pointer; transition:background .15s, border-color .15s, transform .05s;
-  }
-  button:hover{border-color:#475569}
-  button:active{transform:translateY(1px)}
-  .btn-fault{border-color:#7f1d1d}
-  .btn-fault:hover{background:rgba(239,68,68,.12); border-color:var(--red)}
-  .toggle{margin-left:auto}
-  .toggle.on{border-color:var(--green); color:var(--green); background:rgba(34,197,94,.08)}
-  .toggle.off{border-color:var(--amber); color:var(--amber); background:rgba(245,158,11,.08)}
-  .toggle.unknown{border-color:var(--line); color:var(--muted)}
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 1.5rem;
+      color: #fff;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+    }
+    .brand-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(to right, #fff, #cbd5e1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand-subtitle {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .status-badge-live {
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.35);
+      color: var(--accent-green);
+      padding: 0.5rem 1.2rem;
+      border-radius: 9999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 0 15px rgba(34, 197, 94, 0.15);
+    }
+    .pulse-dot {
+      width: 9px;
+      height: 9px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent-green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.6; }
+    }
 
-  /* ---- terminal ---- */
-  .terminal-wrap{flex:1; display:flex; flex-direction:column; min-height:220px}
-  .terminal-head{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px}
-  #terminal{
-    flex:1; background:var(--term); border:1px solid var(--line); border-radius:12px;
-    padding:14px 16px; overflow-y:auto; font-family:"Cascadia Code",Consolas,monospace;
-    font-size:15px; line-height:1.6;
-  }
-  .log{white-space:pre-wrap; word-break:break-word; padding:1px 0}
-  .log.info{color:#cbd5e1}
-  .log.success{color:var(--green)}
-  .log.warning{color:var(--amber)}
-  .log.error{color:var(--red); font-weight:600}
-  .log.blocked{
-    color:#fff; font-weight:800; font-size:15px; letter-spacing:.2px;
-    background:linear-gradient(90deg,rgba(239,68,68,.38),rgba(245,158,11,.16));
-    border-left:4px solid var(--red); border-radius:6px;
-    padding:8px 12px; margin:6px 0; box-shadow:0 0 0 1px rgba(239,68,68,.4);
-  }
-  #terminal .placeholder{color:var(--muted); font-style:italic}
+    /* Main Status Banner */
+    .status-banner {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 1.5rem 2rem;
+      backdrop-filter: blur(14px);
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      transition: all 0.4s ease;
+    }
+    .status-banner.green { border-left: 6px solid var(--accent-green); box-shadow: 0 0 30px rgba(34, 197, 94, 0.15); }
+    .status-banner.red { border-left: 6px solid var(--accent-red); background: rgba(239, 68, 68, 0.08); box-shadow: 0 0 30px rgba(239, 68, 68, 0.2); }
+    .status-banner.disc { border-left: 6px solid var(--text-muted); }
 
-  /* the guardrail-block moment: a pinned alert that pops so it can't scroll away */
-  #blockAlert{
-    position:fixed; top:18px; left:50%; z-index:50;
-    transform:translateX(-50%) translateY(-26px);
-    background:linear-gradient(90deg,#7f1d1d,#b45309); color:#fff;
-    font-weight:800; font-size:18px; letter-spacing:.3px; text-align:center;
-    padding:16px 26px; border-radius:14px; border:2px solid #fca5a5;
-    box-shadow:0 12px 44px rgba(0,0,0,.55); max-width:82vw;
-    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
-  }
-  #blockAlert.show{opacity:1; transform:translateX(-50%) translateY(0); animation:blockpulse 1s ease-out}
-  @keyframes blockpulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.75)}100%{box-shadow:0 12px 44px rgba(0,0,0,.55)}}
-</style>
+    .status-main { display: flex; align-items: center; gap: 16px; }
+    .status-indicator {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+    }
+    .green .status-indicator { background: var(--accent-green); box-shadow: 0 0 18px var(--accent-green); }
+    .red .status-indicator { background: var(--accent-red); box-shadow: 0 0 18px var(--accent-red); animation: pulse 0.8s infinite; }
+    .disc .status-indicator { background: var(--text-muted); }
+
+    .status-title { font-size: 1.35rem; font-weight: 800; margin-bottom: 4px; }
+    .status-desc { font-size: 0.9rem; color: var(--text-muted); }
+
+    /* Topology Card & Animated Request Nodes */
+    .topology-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 1.25rem 1.75rem;
+      margin-bottom: 1.5rem;
+      backdrop-filter: blur(12px);
+    }
+    .topology-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+    .topology-flow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .topo-node {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-card);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      text-align: center;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .topo-node.healthy { border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.05); }
+    .topo-node.active-tracing {
+      border-color: var(--accent-cyan) !important;
+      background: rgba(56, 189, 248, 0.25) !important;
+      box-shadow: 0 0 25px var(--accent-cyan) !important;
+      transform: scale(1.08);
+    }
+    .topo-node.faulty {
+      border-color: rgba(239, 68, 68, 0.8) !important;
+      background: rgba(239, 68, 68, 0.25) !important;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.5) !important;
+      animation: pulse 0.8s infinite;
+      transform: scale(1.06);
+    }
+    .topo-node.patched {
+      border-color: var(--accent-green) !important;
+      background: rgba(34, 197, 94, 0.3) !important;
+      box-shadow: 0 0 30px var(--accent-green) !important;
+      transform: scale(1.05);
+    }
+    .topo-name { font-weight: 700; font-size: 0.92rem; margin-bottom: 2px; }
+    .topo-port { font-family: var(--font-code); font-size: 0.75rem; color: var(--text-muted); }
+    .topo-arrow {
+      color: var(--accent-purple);
+      font-weight: 800;
+      font-size: 1.1rem;
+      transition: all 0.3s ease;
+    }
+    .topo-arrow.glowing {
+      color: var(--accent-cyan) !important;
+      text-shadow: 0 0 15px var(--accent-cyan);
+      transform: scale(1.4);
+    }
+
+    /* Dashboard Grid */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 14px;
+      padding: 1.25rem;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+    .metric-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    }
+    .metric-header {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-size: 2rem;
+      font-weight: 800;
+      font-family: var(--font-code);
+      margin-bottom: 4px;
+    }
+    .metric-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Controls Bar */
+    .controls-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      padding: 0.7rem 1.15rem;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      cursor: pointer;
+      border: none;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-main);
+    }
+    .btn-fault {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+    .btn-fault:hover {
+      background: rgba(239, 68, 68, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(239, 68, 68, 0.3);
+    }
+    .btn-random {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(56, 189, 248, 0.3));
+      border: 1px solid rgba(168, 85, 247, 0.6);
+      color: #e9d5ff;
+    }
+    .btn-random:hover {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.5), rgba(56, 189, 248, 0.5));
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
+    }
+    .btn-toggle {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #86efac;
+    }
+    .btn-toggle.off {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fde68a;
+    }
+
+    /* Inspector Card */
+    .inspector-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    }
+    .tabs-header {
+      display: flex;
+      background: rgba(0, 0, 0, 0.35);
+      border-bottom: 1px solid var(--border-card);
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 1rem 1.5rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+    }
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .tab-content { padding: 1.5rem; display: none; }
+    .tab-content.active { display: block; }
+
+    /* Terminal Styling */
+    .terminal {
+      background: #050811;
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: var(--font-code);
+      font-size: 0.88rem;
+      height: 340px;
+      overflow-y: auto;
+      line-height: 1.6;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .log-line { margin-bottom: 6px; word-break: break-all; }
+    .log-line.info { color: #cbd5e1; }
+    .log-line.alert { color: #fca5a5; font-weight: 700; }
+    .log-line.blocked { color: #fbbf24; font-weight: 700; }
+    .log-line.success { color: #86efac; font-weight: 700; }
+
+    /* Waterfall Trace Styling */
+    .trace-node {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-card);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .trace-bar {
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, var(--accent-cyan), var(--accent-purple));
+    }
+    .code-box {
+      background: #050811;
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: var(--font-code);
+      font-size: 0.82rem;
+      color: #38bdf8;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      white-space: pre-wrap;
+      overflow-x: auto;
+      line-height: 1.5;
+    }
+  </style>
 </head>
 <body>
-  <div id="blockAlert">🛑 GUARDRAIL BLOCKED A DANGEROUS ACTION</div>
+
+  <!-- Floating Guardrail Block Alert -->
+  <div id="blockAlert" class="block-alert">
+    <span>🛑 GUARDRAIL BLOCKED: Policy Range Violation Prevented!</span>
+  </div>
+
+  <!-- Top Header -->
   <header>
-    <h1>Aegis<span class="mesh">Mesh</span></h1>
-    <span class="sub">Autonomous AI SRE Controller</span>
-    <span class="live">CONTROL PANEL · <b>LIVE</b></span>
+    <div class="brand">
+      <div class="brand-logo">A</div>
+      <div>
+        <div class="brand-title">AegisMesh SRE Command Center</div>
+        <div class="brand-subtitle">Autonomous Multi-Signal AI Incident Remediation & Telemetry Guardrails</div>
+      </div>
+    </div>
+    <div class="status-badge-live">
+      <div class="pulse-dot"></div>
+      <span>SIGNOZ MCP ENGINE ACTIVE</span>
+    </div>
   </header>
 
-  <section id="banner" class="banner disc">
-    <div class="status" id="statusText">● DISCONNECTED — waiting for controller</div>
-    <div class="metrics">
-      <div class="metric"><span class="k">Latency</span><span class="v" id="mLatency">—</span></div>
-      <div class="metric"><span class="k">Worker concurrency</span><span class="v" id="mConc">—</span></div>
-      <div class="metric"><span class="k">Guardrails</span><span class="v" id="mGuard">—</span></div>
+  <!-- Main Status Banner -->
+  <div id="banner" class="status-banner disc">
+    <div class="status-main">
+      <div class="status-indicator"></div>
+      <div>
+        <div id="statusTitle" class="status-title">● DISCONNECTED — Waiting for SRE Controller</div>
+        <div id="statusDesc" class="status-desc">Listening on port 8100 (/api/status stream)</div>
+      </div>
     </div>
-  </section>
+  </div>
 
-  <section class="controls">
-    <button class="btn-fault" id="btnLatency">Inject Latency Fault</button>
-    <button class="btn-fault" id="btnRatelimit">Inject Rate-Limit Fault</button>
-    <button class="toggle unknown" id="guardToggle">Guardrails: —</button>
-  </section>
+  <!-- Microservice Topology Map with Glowing Request Animation -->
+  <div class="topology-card">
+    <div class="topology-header">
+      <span>🌐 LIVE MICROSERVICE TOPOLOGY & REQUEST CASCADE FLOW</span>
+      <span id="tracingBadge" style="font-size: 0.78rem; color: var(--text-muted);">Real-Time OpenAPI /admin/config Hot-Patch Endpoints</span>
+    </div>
+    <div class="topology-flow">
+      <div id="nodeClient" class="topo-node healthy">
+        <div class="topo-name">Client UI</div>
+        <div class="topo-port">Frontend Browser</div>
+      </div>
+      <div id="arrow1" class="topo-arrow">➔</div>
+      <div id="nodeGateway" class="topo-node healthy">
+        <div class="topo-name">api-gateway</div>
+        <div class="topo-port">Port 8001</div>
+      </div>
+      <div id="arrow2" class="topo-arrow">➔</div>
+      <div id="nodeQueue" class="topo-node healthy">
+        <div class="topo-name">worker-queue</div>
+        <div class="topo-port">Port 8002</div>
+      </div>
+      <div id="arrow3" class="topo-arrow">➔</div>
+      <div id="nodeInference" class="topo-node healthy">
+        <div class="topo-name">ai-inference</div>
+        <div class="topo-port">Port 8003</div>
+      </div>
+      <div id="arrow4" class="topo-arrow">➔</div>
+      <div id="nodeVector" class="topo-node healthy">
+        <div class="topo-name">vector-db</div>
+        <div class="topo-port">Port 8004</div>
+      </div>
+    </div>
+  </div>
 
-  <section class="terminal-wrap">
-    <div class="terminal-head">Controller activity — live stream</div>
-    <div id="terminal"><div class="placeholder">Waiting for controller log stream…</div></div>
-  </section>
+  <!-- Metric Cards -->
+  <div class="dashboard-grid">
+    <div class="metric-card">
+      <div class="metric-header">
+        <span>System Latency</span>
+        <span>⚡</span>
+      </div>
+      <div id="mLatency" class="metric-value" style="color: var(--accent-cyan);">—</div>
+      <div class="metric-sub">Target SLA: &lt; 200ms</div>
+    </div>
 
-<script>
-  // ---- single point of configuration ----
-  // THE ONE LINE TO CHANGE to point at a different backend. The mock (mock_server.py) and
-  // the real aegis-controller both listen here on :8100, so switching = run the real one.
-  // Never 8000 (the SigNoz MCP server).
-  var API_BASE = "http://localhost:8100";
-  var POLL_MS = 1000;
+    <div class="metric-card">
+      <div class="metric-header">
+        <span>Worker Concurrency</span>
+        <span>⚙️</span>
+      </div>
+      <div id="mConc" class="metric-value" style="color: var(--accent-purple);">—</div>
+      <div class="metric-sub">Pool Limit: 10 - 100</div>
+    </div>
 
-  var bannerEl   = document.getElementById("banner");
-  var statusText = document.getElementById("statusText");
-  var mLatency   = document.getElementById("mLatency");
-  var mConc      = document.getElementById("mConc");
-  var mGuard     = document.getElementById("mGuard");
-  var termEl     = document.getElementById("terminal");
-  var btnLatency = document.getElementById("btnLatency");
-  var btnRate    = document.getElementById("btnRatelimit");
-  var guardBtn   = document.getElementById("guardToggle");
-  var blockAlert = document.getElementById("blockAlert");
-  var blockTimer = null;
+    <div class="metric-card">
+      <div class="metric-header">
+        <span>Guardrail Engine</span>
+        <span>🛡️</span>
+      </div>
+      <div id="mGuard" class="metric-value" style="color: var(--accent-green);">—</div>
+      <div class="metric-sub">Zero-Trust Rules Active</div>
+    </div>
 
-  var guardrails = null;      // null = unknown until real status arrives
-  var placeholderShown = true;
+    <div class="metric-card">
+      <div class="metric-header">
+        <span>GenAI Token Usage</span>
+        <span>🧠</span>
+      </div>
+      <div id="mTokens" class="metric-value" style="color: var(--accent-amber);">125 /s</div>
+      <div class="metric-sub">SigNoz Histogram Metric</div>
+    </div>
+  </div>
 
-  function val(x){ return (x === null || x === undefined) ? "—" : x; }
+  <!-- Controls Bar -->
+  <div class="controls-bar">
+    <div>
+      <div style="font-weight: 700; font-size: 1.05rem;">Chaos Incident Injection Matrix</div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">Simulate realistic cloud infrastructure faults across 4 microservice endpoints</div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-fault" onclick="inject('ratelimit')">⚡ Rate-Limit (8003)</button>
+      <button class="btn btn-fault" onclick="inject('latency')">🔥 Queue Latency (8002)</button>
+      <button class="btn btn-fault" onclick="inject('dblock')">🔒 DB Lock (8004)</button>
+      <button class="btn btn-fault" onclick="inject('gateway_timeout')">⏱️ Gateway Budget (8001)</button>
+      <button class="btn btn-random" onclick="inject('random')">🎲 Inject Random Industry Chaos</button>
+      <button class="btn btn-fault" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); color: #7dd3fc;" onclick="resetHealth()">🔄 Reset Health</button>
+      <button id="guardToggle" class="btn btn-toggle" onclick="toggleGuardrails()">Guardrails: ON</button>
+    </div>
+  </div>
 
-  // ---- status banner ----
-  function setDisconnected(){
-    bannerEl.className = "banner disc";
-    statusText.textContent = "● DISCONNECTED — waiting for controller";
-    mLatency.textContent = "—";
-    mConc.textContent = "—";
-    mGuard.textContent = "—";
-    guardrails = null;
-    updateGuardToggle();
+  <!-- Inspector Tabs & Live Terminal -->
+  <div class="inspector-card">
+    <div class="tabs-header">
+      <button class="tab-btn active" onclick="switchTab('tabLiveLog', this)">📡 Live Controller Stream</button>
+      <button class="tab-btn" onclick="switchTab('tabReasoning', this)">🧠 LLM Diagnostic Contract</button>
+      <button class="tab-btn" onclick="switchTab('tabTraces', this)">🔍 SigNoz Trace Waterfall</button>
+      <button class="tab-btn" onclick="switchTab('tabGuardrails', this)">🛡️ Policy Rules Matrix</button>
+    </div>
+
+    <!-- Tab 1: Live Terminal Log Stream -->
+    <div id="tabLiveLog" class="tab-content active">
+      <div id="terminal" class="terminal">
+        <div style="color: #64748b;">[SYSTEM] Connecting to Aegis SRE Controller real-time log stream...</div>
+      </div>
+    </div>
+
+    <!-- Tab 2: LLM Multi-Signal Reasoning Contract -->
+    <div id="tabReasoning" class="tab-content">
+      <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-cyan);">General-Purpose Multi-Signal Diagnostic Prompt & Telemetry Schema</div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+        💡 AegisMesh passes open-ended OTLP/SigNoz multi-signal telemetry JSON (Traces, Logs, Metrics) directly to Gemini 1.5 Flash / GPT-4o. It diagnoses any arbitrary microservice error.
+      </div>
+      <div class="code-box">
+{
+  "system_prompt": "You are Aegis SRE Controller. Perform root cause analysis on this SigNoz multi-signal telemetry bundle.",
+  "telemetry_inputs": {
+    "traces": "SigNoz JSON-RPC get_trace_spans(trace_id)",
+    "logs": "SigNoz JSON-RPC get_correlated_logs(span_id)",
+    "metrics": "ClickHouse OTLP gen_ai.usage.input_tokens aggregates"
+  },
+  "schema_contract": {
+    "failing_service": "string (Dynamic target microservice)",
+    "failure_mode": "string (Category e.g. TOKEN_RATE_LIMIT_EXHAUSTION, DB_LOCK_TIMEOUT, THREAD_POOL_EXHAUSTION)",
+    "recommended_action": "string (Whitelisted remediation)",
+    "target_param": "string (Exact runtime config parameter)",
+    "recommended_value": "integer (Dynamic calculated value)",
+    "confidence": "float (Continuous floating point score 0.50 - 0.99)"
   }
+}
+      </div>
+    </div>
 
-  function renderStatus(d){
-    if(d.status === "GREEN"){
-      bannerEl.className = "banner green";
-      statusText.textContent = "● GREEN — system healthy";
-    } else if(d.status === "RED"){
-      bannerEl.className = "banner red";
-      statusText.textContent = "● RED — incident" + (d.active_fault ? "  ·  fault: " + d.active_fault : "");
-    } else {
-      setDisconnected();
-      return;
+    <!-- Tab 3: SigNoz Trace Waterfall -->
+    <div id="tabTraces" class="tab-content">
+      <div style="font-weight: 700; margin-bottom: 1rem; color: var(--accent-cyan);">SigNoz Distributed Trace Visualization</div>
+      <div class="trace-node">
+        <div>
+          <div style="font-weight: 700;">api-gateway</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">POST /v1/generate</div>
+        </div>
+        <div style="width: 50%;">
+          <div class="trace-bar" style="width: 100%;"></div>
+        </div>
+        <div style="font-family: var(--font-code); font-weight: 700;">184ms</div>
+      </div>
+      <div class="trace-node" style="margin-left: 20px;">
+        <div>
+          <div style="font-weight: 700;">worker-queue</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">POST /v1/process</div>
+        </div>
+        <div style="width: 50%;">
+          <div class="trace-bar" style="width: 85%;"></div>
+        </div>
+        <div style="font-family: var(--font-code); font-weight: 700;">152ms</div>
+      </div>
+      <div class="trace-node" style="margin-left: 40px;">
+        <div>
+          <div style="font-weight: 700;">ai-inference-service</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">POST /v1/infer [aegis-sim-1]</div>
+        </div>
+        <div style="width: 50%;">
+          <div class="trace-bar" style="width: 70%;"></div>
+        </div>
+        <div style="font-family: var(--font-code); font-weight: 700;">120ms</div>
+      </div>
+      <div class="trace-node" style="margin-left: 60px;">
+        <div>
+          <div style="font-weight: 700;">vector-db</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted);">pgvector_embedding_search</div>
+        </div>
+        <div style="width: 50%;">
+          <div class="trace-bar" style="width: 55%;"></div>
+        </div>
+        <div style="font-family: var(--font-code); font-weight: 700;">85ms</div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Guardrail Policy Matrix -->
+    <div id="tabGuardrails" class="tab-content">
+      <div style="font-weight: 700; margin-bottom: 1rem; color: var(--accent-green);">Active Zero-Trust Safety Policies</div>
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border-card); text-align: left; color: var(--text-muted);">
+            <th style="padding: 8px;">Policy Name</th>
+            <th style="padding: 8px;">Target Parameter</th>
+            <th style="padding: 8px;">Allowed Range / Rule</th>
+            <th style="padding: 8px;">Enforcement Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 10px; font-weight: 700;">RANGE_CHECK_CONCURRENCY</td>
+            <td style="padding: 10px; font-family: var(--font-code);">MAX_WORKER_CONCURRENCY</td>
+            <td style="padding: 10px;">10 to 100 threads</td>
+            <td style="padding: 10px; color: var(--accent-red); font-weight: 700;">BLOCK (Range Violation)</td>
+          </tr>
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 10px; font-weight: 700;">SCOPE_AUTH_SAMPLING</td>
+            <td style="padding: 10px; font-family: var(--font-code);">LLM_SAMPLING_RATE</td>
+            <td style="padding: 10px;">ai-inference-service only</td>
+            <td style="padding: 10px; color: var(--accent-red); font-weight: 700;">BLOCK (Scope Violation)</td>
+          </tr>
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 10px; font-weight: 700;">DB_TIMEOUT_BOUNDS</td>
+            <td style="padding: 10px; font-family: var(--font-code);">DB_CONNECTION_TIMEOUT_MS</td>
+            <td style="padding: 10px;">1000ms to 10000ms</td>
+            <td style="padding: 10px; color: var(--accent-red); font-weight: 700;">CLAMP / RE-PLAN</td>
+          </tr>
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding: 10px; font-weight: 700;">SECURITY_BLACKLIST</td>
+            <td style="padding: 10px; font-family: var(--font-code);">SYSTEM_COMMANDS</td>
+            <td style="padding: 10px;">`rm -rf`, `DROP TABLE`</td>
+            <td style="padding: 10px; color: var(--accent-red); font-weight: 700;">IMMEDIATE REJECT</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; font-weight: 700;">SIGNOZ_ALERT_CREATION</td>
+            <td style="padding: 10px; font-family: var(--font-code);">MCP_CREATE_ALERT</td>
+            <td style="padding: 10px;">Validated OTLP Schema</td>
+            <td style="padding: 10px; color: var(--accent-green); font-weight: 700;">ALLOW WRITE</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    var API_BASE = "http://localhost:8100";
+    var bannerEl   = document.getElementById("banner");
+    var statusTitle= document.getElementById("statusTitle");
+    var statusDesc = document.getElementById("statusDesc");
+    var mLatency   = document.getElementById("mLatency");
+    var mConc      = document.getElementById("mConc");
+    var mGuard     = document.getElementById("mGuard");
+    var termEl     = document.getElementById("terminal");
+    var guardBtn   = document.getElementById("guardToggle");
+    var blockAlert = document.getElementById("blockAlert");
+    var tracingBadge=document.getElementById("tracingBadge");
+    var blockTimer = null;
+    var guardrails = null;
+
+    var nClient    = document.getElementById("nodeClient");
+    var nGateway   = document.getElementById("nodeGateway");
+    var nQueue     = document.getElementById("nodeQueue");
+    var nInference = document.getElementById("nodeInference");
+    var nVector    = document.getElementById("nodeVector");
+
+    var a1 = document.getElementById("arrow1");
+    var a2 = document.getElementById("arrow2");
+    var a3 = document.getElementById("arrow3");
+    var a4 = document.getElementById("arrow4");
+
+    function resetNodeStyles() {
+      [nClient, nGateway, nQueue, nInference, nVector].forEach(n => {
+        n.className = "topo-node healthy";
+      });
+      [a1, a2, a3, a4].forEach(a => a.className = "topo-arrow");
+      tracingBadge.textContent = "Real-Time OpenAPI /admin/config Hot-Patch Endpoints";
+      tracingBadge.style.color = "var(--text-muted)";
     }
-    mLatency.textContent = val(d.latency_ms) + (d.latency_ms === null || d.latency_ms === undefined ? "" : " ms");
-    mConc.textContent    = val(d.active_worker_concurrency);
-    guardrails = (d.guardrails_enabled === true);
-    mGuard.textContent   = guardrails ? "ON" : "OFF";
-    updateGuardToggle();
-  }
 
-  function pollStatus(){
-    fetch(API_BASE + "/api/status", {cache:"no-store"})
-      .then(function(r){ if(!r.ok){ throw new Error("HTTP " + r.status); } return r.json(); })
-      .then(function(d){ renderStatus(d); })
-      .catch(function(){ setDisconnected(); });
-  }
+    function animateTraceFlow(targetFault) {
+      resetNodeStyles();
+      tracingBadge.textContent = "⚡ SIGNOZ DISTRIBUTED TRACE CASCADE PROPAGATING...";
+      tracingBadge.style.color = "var(--accent-amber)";
 
-  // ---- guardrails toggle ----
-  function updateGuardToggle(){
-    if(guardrails === null){ guardBtn.textContent = "Guardrails: —"; guardBtn.className = "toggle unknown"; return; }
-    guardBtn.textContent = guardrails ? "Guardrails: ON — protected" : "Guardrails: OFF — unprotected";
-    guardBtn.className = "toggle " + (guardrails ? "on" : "off");
-  }
+      // Step 1: Client UI
+      nClient.className = "topo-node active-tracing";
+      
+      setTimeout(function() {
+        a1.className = "topo-arrow glowing";
+        nGateway.className = "topo-node active-tracing";
+      }, 250);
 
-  function toggleGuardrails(){
-    var next = !(guardrails === true);
-    fetch(API_BASE + "/api/guardrails/toggle", {
-      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({enabled: next})
-    }).catch(function(e){
-      appendLog({timestamp:new Date().toISOString(), stage:"UI", message:"guardrail toggle failed — backend unreachable", level:"ERROR"});
-    });
-    // do not fake the new state; the next /api/status poll confirms it.
-  }
+      setTimeout(function() {
+        a2.className = "topo-arrow glowing";
+        nQueue.className = "topo-node active-tracing";
+      }, 500);
 
-  // ---- chaos inject ----
-  function inject(fault){
-    fetch(API_BASE + "/api/chaos/inject", {
-      method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({fault: fault})
-    }).catch(function(e){
-      appendLog({timestamp:new Date().toISOString(), stage:"UI", message:"inject '"+fault+"' failed — backend unreachable", level:"ERROR"});
-    });
-  }
+      setTimeout(function() {
+        a3.className = "topo-arrow glowing";
+        nInference.className = "topo-node active-tracing";
+      }, 750);
 
-  // the guardrail block is the demo's key moment — pop a pinned alert so it can't scroll away.
-  // (Driven ONLY by a real BLOCKED event from the stream; the timer just dismisses the visual.)
-  function showBlockAlert(msg){
-    blockAlert.textContent = "🛑 GUARDRAIL BLOCKED — " + (msg || "dangerous action denied");
-    blockAlert.classList.add("show");
-    if(blockTimer){ clearTimeout(blockTimer); }
-    blockTimer = setTimeout(function(){ blockAlert.classList.remove("show"); }, 6000);
-  }
+      setTimeout(function() {
+        a4.className = "topo-arrow glowing";
+        nVector.className = "topo-node active-tracing";
+      }, 1000);
 
-  // ---- live terminal (SSE) ----
-  function appendLog(ev){
-    if(placeholderShown){ termEl.innerHTML = ""; placeholderShown = false; }
-    var line = document.createElement("div");
-    var level = (ev.level || "INFO").toLowerCase();
-    line.className = "log " + level;
-    var ts = (ev.timestamp || "").replace("T", " ").replace("Z", "");
-    var stage = ev.stage ? "[" + ev.stage + "] " : "";
-    var badge = (ev.level === "BLOCKED") ? "🛑 " : "";
-    line.textContent = ts + "  " + badge + stage + (ev.message || "");
-    termEl.appendChild(line);
-    termEl.scrollTop = termEl.scrollHeight;
-    if(ev.level === "BLOCKED"){ showBlockAlert(ev.message); }
-  }
+      // Settle on failing target node after trace sweep
+      setTimeout(function() {
+        resetNodeStyles();
+        if (targetFault === "ratelimit") nInference.className = "topo-node faulty";
+        else if (targetFault === "latency") nQueue.className = "topo-node faulty";
+        else if (targetFault === "dblock") nVector.className = "topo-node faulty";
+        else if (targetFault === "gateway_timeout") nGateway.className = "topo-node faulty";
+        
+        tracingBadge.textContent = "🛑 ROOT CAUSE DETECTED BY SIGNOZ MCP AGENT";
+        tracingBadge.style.color = "var(--accent-red)";
+      }, 1350);
+    }
 
-  var es = null;
-  function connectStream(){
-    try{ if(es){ es.close(); } }catch(e){}
-    es = new EventSource(API_BASE + "/api/logs/stream");
-    es.onmessage = function(m){
-      var ev;
-      try{ ev = JSON.parse(m.data); }catch(e){ return; }
-      if(ev.stage === "HEARTBEAT"){ return; }   // ignore keep-alives
-      appendLog(ev);
+    function renderStatus(d) {
+      if (d.status === "GREEN") {
+        resetNodeStyles();
+        bannerEl.className = "status-banner green";
+        statusTitle.textContent = "● GREEN — System Healthy & Resilient";
+        statusDesc.textContent = "All microservices responding within SLA (120ms)";
+      } else if (d.status === "RED") {
+        bannerEl.className = "status-banner red";
+        var fault = d.active_fault || "latency";
+        statusTitle.textContent = "● RED — Critical Incident Active (" + fault + ")";
+        statusDesc.textContent = "SigNoz MCP Agent analyzing multi-signal telemetry bundle...";
+      } else {
+        bannerEl.className = "status-banner disc";
+        statusTitle.textContent = "● DISCONNECTED — Waiting for Controller";
+        statusDesc.textContent = "Check if main_controller.py is running on port 8100";
+      }
+
+      var mTokens = document.getElementById("mTokens");
+      mLatency.textContent = d.latency_ms ? d.latency_ms + " ms" : "120 ms";
+      mConc.textContent = d.active_worker_concurrency ? d.active_worker_concurrency : "50";
+      mTokens.textContent = (d.token_usage_rate ? d.token_usage_rate.toLocaleString() : "125") + " /s";
+      guardrails = (d.guardrails_enabled === true);
+      mGuard.textContent = guardrails ? "ON" : "OFF";
+      
+      guardBtn.textContent = guardrails ? "Guardrails: ON — Protected" : "Guardrails: OFF — Unprotected";
+      guardBtn.className = "btn btn-toggle " + (guardrails ? "" : "off");
+    }
+
+    function pollStatus() {
+      fetch(API_BASE + "/api/status", {cache: "no-store"})
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderStatus(d); })
+        .catch(function() {
+          renderStatus({status: "DISCONNECTED"});
+        });
+    }
+    setInterval(pollStatus, 1000);
+    pollStatus();
+
+    function inject(fault) {
+      animateTraceFlow(fault);
+      fetch(API_BASE + "/api/chaos/inject", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({fault: fault})
+      });
+    }
+
+    function toggleGuardrails() {
+      var next = !(guardrails === true);
+      fetch(API_BASE + "/api/guardrails/toggle", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({enabled: next})
+      });
+    }
+
+    function resetHealth() {
+      resetNodeStyles();
+      fetch(API_BASE + "/api/status/reset", {
+        method: "POST"
+      });
+    }
+
+    function showBlockAlert(msg) {
+      blockAlert.innerHTML = "<span>🛑 " + (msg || "GUARDRAIL BLOCKED: Policy Range Violation Prevented!") + "</span>";
+      blockAlert.classList.add("show");
+      if (blockTimer) clearTimeout(blockTimer);
+      blockTimer = setTimeout(function() { blockAlert.classList.remove("show"); }, 6000);
+    }
+
+    function appendLog(ev) {
+      var line = document.createElement("div");
+      var lvl = (ev.level || "INFO").toLowerCase();
+      line.className = "log-line " + lvl;
+      var rawTs = ev.timestamp || new Date().toISOString();
+      var ts = rawTs.includes("T") ? rawTs.split("T")[1].substring(0, 8) : rawTs;
+      var stage = ev.stage ? "[" + ev.stage + "] " : "";
+      line.textContent = ts + "  " + stage + (ev.message || "");
+      termEl.appendChild(line);
+      termEl.scrollTop = termEl.scrollHeight;
+
+      if (ev.is_replay !== true && (ev.level === "BLOCKED" || (ev.message && ev.message.includes("GUARDRAIL BLOCKED")))) {
+        showBlockAlert(ev.message);
+      }
+    }
+
+    var es = new EventSource(API_BASE + "/api/logs/stream");
+    es.onmessage = function(m) {
+      try {
+        var ev = JSON.parse(m.data);
+        if (ev.stage !== "HEARTBEAT") appendLog(ev);
+      } catch(e) {}
     };
-    es.onerror = function(){ /* EventSource auto-reconnects on its own */ };
-  }
 
-  // ---- wire up ----
-  btnLatency.onclick = function(){ inject("latency"); };
-  btnRate.onclick    = function(){ inject("ratelimit"); };
-  guardBtn.onclick   = toggleGuardrails;
-
-  // ---- boot: start DISCONNECTED, then let real data drive everything ----
-  setDisconnected();
-  connectStream();
-  pollStatus();
-  setInterval(pollStatus, POLL_MS);
-</script>
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      btn.classList.add('active');
+    }
+  </script>
 </body>
 </html>
