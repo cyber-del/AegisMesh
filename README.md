@@ -1,158 +1,96 @@
-# 🛡️ AegisMesh — Autonomous AI SRE Controller
+# AegisMesh
 
-> **Agents of SigNoz Hackathon 2026 — Track 01 Submission**  
-> *Autonomous Multi-Signal Self-Healing Infrastructure Controller powered by SigNoz MCP & Google Antigravity*
+An autonomous SRE controller, built for the Agents of SigNoz Hackathon 2026 (Track 01).
 
----
+Four instrumented microservices run under a simulated load. When one of them is pushed into a fault, the controller reads correlated traces, logs and token-usage metrics over the Model Context Protocol, asks an LLM what to change, checks that proposal against a guardrail engine, and applies the change to the running service through an admin endpoint. Nothing restarts.
 
-[![Track 01](https://img.shields.io/badge/Track-01%20Agents%20of%20SigNoz-38bdf8?style=for-the-badge)](https://signoz.io)
-[![Protocol](https://img.shields.io/badge/Protocol-JSON--RPC%202.0%20MCP-a855f7?style=for-the-badge)](https://modelcontextprotocol.io)
-[![Status](https://img.shields.io/badge/Status-100%25%20Verified%20%26%20Live-22c55e?style=for-the-badge)](#-empirical-verification-matrix)
-
----
-
-## 🚀 Overview
-
-**AegisMesh** closes the operational observability loop for cloud-native infrastructure outages. Rather than treating telemetry as a passive monitoring dashboard where SRE engineers manually investigate midnight alerts, AegisMesh automatically intercepts cascade failures, correlates multi-signal telemetry via the **SigNoz Model Context Protocol (MCP) Server**, passes proposed remediations through a **Zero-Trust Guardrail Engine**, applies live runtime hot-patches, and dynamically injects permanent **SigNoz Alert Rules** to prevent recurring outages.
-
-$$\text{Cascade Alert} \xrightarrow{} \text{SigNoz MCP Telemetry} \xrightarrow{} \text{LLM Reasoning} \xrightarrow{} \text{Zero-Trust Policy} \xrightarrow{} \text{Runtime Hot-Patch} \xrightarrow{} \text{SigNoz Alert Creation}$$
-
----
-
-## 🏗️ System Architecture & Component Topology
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              TARGET MICROSERVICE TOPOLOGY                               │
-│                                                                                         │
-│  [ Client UI ] ──► [ api-gateway ] ──► [ worker-queue ] ──► [ ai-inference-service ]   │
-│                       (Port 8001)         (Port 8002)            (Port 8003)            │
-│                                                                       │                 │
-│                                                                 [ vector-db ]           │
-│                                                                  (Port 8004)            │
-└──────────────────────────────────────────┬──────────────────────────────────────────────┘
-                                           │ Unified OpenTelemetry Stream
-                                           ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                              SIGNOZ OBSERVABILITY PLATFORM                              │
-│                    (Traces + Logs + GenAI Token Usage Metrics Aggregate)                │
-└──────────────────────────────────────────┬──────────────────────────────────────────────┘
-                                           │
-                    JSON-RPC 2.0 MCP Read  │ JSON-RPC 2.0 MCP Write
-                    (get_trace_spans, etc) │ (create_alert_rule)
-                                           ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────┐
-│                                AEGIS AI SRE CONTROLLER                                  │
-│                                                                                         │
-│   • Multi-Signal LLM Diagnostic Engine (Gemini 1.5 Flash / GPT-4o REST APIs)            │
-│   • Bounded Adaptive AI Re-Planner Engine                                               │
-│   • Zero-Trust Safety Guardrail Engine (Range, Whitelist, Blacklist, Cooldowns)          │
-│   • OpenAPI Zero-Downtime Hot-Patcher (/admin/config endpoints)                         │
-└─────────────────────────────────────────────────────────────────────────────────────────┘
+[ api-gateway ] -> [ worker-queue ] -> [ ai-inference-service ]      [ load-generator ]
+    :8001              :8002                  :8003                   (drives traffic)
+         |                  |                      |
+         +------------------+----------------------+
+                            |  OpenTelemetry (traces, logs, GenAI token metrics)
+                            v
+                   [ self-hosted SigNoz ]
+                            |
+                            |  JSON-RPC 2.0 over MCP
+                            v
+                   [ Aegis SRE controller :8100 ]
+                      diagnosis -> guardrails -> hot patch
 ```
 
----
+## How a fault is handled
 
-## ✨ Key Features & Technical Highlights
+1. A fault is injected from the dashboard, for example queue latency on `worker-queue`.
+2. The controller asks for trace spans, correlated logs and metric aggregates over MCP.
+3. An LLM reads that telemetry and proposes a configuration change with a confidence score.
+4. The guardrail engine checks the proposal in a fixed order: a destructive-command blacklist, a whitelist of parameters that may be changed, a service-scope check, value-range clamping, and a cooldown window.
+5. If the proposal fails a check it is blocked and re-planned into a safe fallback. If it passes, the controller posts it to the target service's `/admin/config` endpoint.
+6. The controller writes an alert rule so the same fault is recognised next time, and takes a shorter path when it recurs.
 
-### 1. 📡 Direct SigNoz MCP Wire Integration (JSON-RPC 2.0)
-* **Read Tools**: Queries `get_trace_spans`, `get_correlated_logs`, and `get_metric_aggregates` over HTTP (`POST http://localhost:8080/mcp`).
-* **Write Tool**: Dynamically calls `create_alert_rule` to write permanent, auto-generated alert rules into SigNoz's ClickHouse rule store.
+## The services
 
-### 2. 🧠 Multi-Signal LLM Reasoning & Adaptive Re-Planning
-* Ingests unstructured multi-signal telemetry JSON and performs open-ended root-cause analysis with continuous floating-point confidence scoring ($0.50 - 0.99$).
-* Includes a **Bounded Adaptive AI Re-Planner (`replan()`)** using Dependency Injection (`guardrail_engine.WHITELIST_PARAMS`) to dynamically recalculate safe parameter fallbacks when policy violations occur.
+Each service exposes `/health`, its own work endpoint, `/admin/config` for live reconfiguration, and chaos endpoints that inject the faults the controller is meant to fix.
 
-### 3. 🛡️ Zero-Trust Guardrail Safety Engine
-Enforces 5 strict policy layers before executing any action:
-* **Security Blacklist**: Blocks destructive commands (`rm -rf`, `DROP TABLE`, `SUDO`).
-* **Parameter Whitelists**: Restricts modifications to authorized parameters (`MAX_WORKER_CONCURRENCY`, `LLM_SAMPLING_RATE`, `GATEWAY_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`).
-* **Target Service Scope Auth**: Validates that parameter changes match allowed service scopes.
-* **Range Boundary Enforcement**: Clamps values within safe operational ceilings.
-* **Cooldown Timers**: Enforces 10-second lockout windows to prevent rapid thrashing.
+The hot patch is the part worth checking. Posting `{"capacity": 42}` to `ai-inference-service/admin/config` changes the running service's capacity and returns what it changed. No restart, no redeploy.
 
-### 4. ⚡ Fast-Path Sub-Second MTTR Acceleration (< 0.5s)
-* **First Incident (Investigation Mode)**: Full multi-signal query + LLM diagnosis + Guardrails + Hot-patch + Permanent SigNoz Alert Rule creation (~10s).
-* **Recurring Incident (Active Alert Match)**: Permanent SigNoz Alert Rule triggers Fast-Path Automated Hot-Patch, resolving the incident in **2.5s (75% faster MTTR)**.
+All three services are instrumented by hand rather than through auto-instrumentation, so the export path stays visible in `telemetry.py`: traces, logs and metrics are wired off one shared Resource, and log records carry the active span's trace id, which is what makes trace-to-log click-through work in SigNoz. The inference service records a `gen_ai.client.token.usage` histogram per request.
 
-### 5. 🎨 High-End Glassmorphism Command Center UI (`frontend/index.html`)
-* **Interactive Live Microservice Topology Map**: Visual flow showing request packet cascade animations with glowing cyan tracing pulses and pulsing red/green status nodes.
-* **5 Chaos Incident Controls**: `⚡ Rate-Limit (8003)`, `🔥 Queue Latency (8002)`, `🔒 DB Lock (8004)`, `⏱️ Gateway Budget (8001)`, `🎲 Inject Random Industry Chaos`.
-* **Dynamic Metrics Grid**: Tracks live response latency (`115ms` to `128ms` healthy SLA vs `4800ms` spike) and GenAI token usage (`110 /s` healthy vs `1,420 /s` spike).
-* **`🧠 LLM Diagnostic Contract` Tab**: Displays open-ended telemetry schemas and Gemini/GPT-4o prompt contracts to prove generalizability.
+## Guardrails
 
----
+Five checks run before anything is applied:
 
-## 📊 Empirical Verification Matrix
+- A blacklist of destructive commands
+- A whitelist of parameters that may be changed at all
+- A check that the parameter belongs to the service being patched
+- Range clamping, so an approved parameter cannot be given an unsafe value
+- A cooldown window, so the same target cannot be patched repeatedly
 
-| Subsystem | Target Endpoint / Spec | Verified Result | Status |
-| :--- | :--- | :--- | :--- |
-| **`api-gateway`** | `POST http://localhost:8001/admin/config` | `200 OK` (`GATEWAY_TIMEOUT_MS=8888`) | **100% VERIFIED LIVE** |
-| **`worker-queue`** | `POST http://localhost:8002/admin/config` | `200 OK` (`MAX_WORKER_CONCURRENCY=73`) | **100% VERIFIED LIVE** |
-| **`ai-inference-service`** | `POST http://localhost:8003/admin/config` | `200 OK` (`capacity=42`) | **100% VERIFIED LIVE** |
-| **`vector-db`** | `POST http://localhost:8004/admin/config` | `200 OK` (`DB_CONNECTION_TIMEOUT_MS=4500`) | **100% VERIFIED LIVE** |
-| **SigNoz MCP Wire** | `POST http://localhost:8080/mcp` | `200 OK` JSON-RPC 2.0 Read/Write | **100% VERIFIED LIVE** |
+A blocked proposal is not discarded. It is re-planned within the whitelist and range bounds, and the fallback is applied instead.
 
----
+## What this is not
 
-## ⚡ Quickstart Runbook
+- **The timings shown in the dashboard are scripted, not measured.** The fast path and the full investigation path each run a fixed sequence with fixed delays. No benchmark in this repository measures recovery time, and those numbers should not be read as performance results.
+- **The controller talks to a mock MCP server by default.** `SIGNOZ_MCP_SERVER_URL` defaults to `http://localhost:8080/mcp`, which `SRE_controller/mock_signoz_mcp_server.py` serves. The client also falls back to generated telemetry when a call fails. The real SigNoz MCP path exists and the wire format is the same, but the demo as shipped does not require SigNoz to be running.
+- **The guardrails can be turned off.** `GuardrailEngine.toggle_guardrails(False)` approves every action, so the policy layer can be demonstrated by contrast. It is on by default.
+- **The faults are injected, not real.** They come from chaos endpoints, not from production traffic.
+- **`vector-db` appears in the topology but does not run.** It has a `main.py` and no Dockerfile, and `docker-compose.yml` defines four services without it.
+- **There is no test suite for the controller.** `test_day1.py` and `test_day2.py` assert on returned values, not on behaviour under load.
 
-### Prerequisites
-* Python 3.10+
-* Google Chrome or Edge browser
-* Git
+## Running it
 
-### Step 1: Start Target Microservices (Terminals 1 to 3)
+Requires Python 3.10 or newer and Docker.
 
-```powershell
-# Terminal 1: Worker Queue (Port 8002)
-cd services/worker-queue
-python -m uvicorn main:app --host 0.0.0.0 --port 8002
-
-# Terminal 2: AI Inference Service (Port 8003)
-cd services/ai-inference-service
-python -m uvicorn main:app --host 0.0.0.0 --port 8003
-
-# Terminal 3: API Gateway (Port 8001)
-cd services/api-gateway
-python -m uvicorn main:app --host 0.0.0.0 --port 8001
+```bash
+docker compose up
 ```
 
-### Step 2: Start Aegis SRE Controller Server (Terminal 4)
+That builds the three services and the load generator on the `signoz-network`, with healthchecks gating startup order. The SigNoz stack itself is deployed separately from `deploy/casting.yaml`, which creates that network.
 
-```powershell
-# Terminal 4: Aegis Controller (Port 8100)
+To run the controller:
+
+```bash
 cd SRE_controller
+python mock_signoz_mcp_server.py     # or point SIGNOZ_MCP_SERVER_URL at a real SigNoz MCP server
 python main_controller.py
 ```
 
-### Step 3: Launch SRE Command Center Web UI
-Open `frontend/index.html` in Google Chrome:
-```text
-file:///c:/signoz%20demo%20project/aegismesh/frontend/index.html
-```
+Then open `frontend/index.html` in a browser.
 
----
+## Built with
 
-## 🧪 Demo Runbook & Hackathon Script
+Python, FastAPI, OpenTelemetry, SigNoz, Docker, and the Model Context Protocol. The LLM diagnosis calls Gemini or GPT-4o over their REST APIs.
 
-1. **Test 1: Self-Healing Cascade Failure**:
-   * Click **`🔥 Queue Latency (8002)`** on the dashboard.
-   * Watch the request flow pulse cyan across topology nodes until `worker-queue` turns **pulsing red**.
-   * Aegis correlates SigNoz MCP telemetry, hot-patches `MAX_WORKER_CONCURRENCY`, and restores health to **🟢 GREEN (120ms)** in ~10 seconds.
+## Who built what
 
-2. **Test 2: Zero-Trust Guardrail Block & Adaptive Re-Plan**:
-   * Click **`⚡ Rate-Limit (8003)`**.
-   * Watch the **`🛑 GUARDRAIL BLOCKED`** alert pop up when an unsafe fix (`999`) is attempted, followed by the Adaptive AI Re-Planner recalculating a safe fallback (`100`).
+A two-person hackathon team. The split is visible in `git log`.
 
-3. **Test 3: Fast-Path Recurring Incident Recovery**:
-   * Click **`⚡ Rate-Limit (8003)`** a second time.
-   * Notice that the permanent SigNoz alert rule auto-heals the system in **just 2.5 seconds (75% faster MTTR)**!
+**V. Abhishek Prakash** built the instrumented service layer: the three FastAPI microservices with their chaos and admin endpoints, the three `telemetry.py` modules, the Dockerfiles and `docker-compose.yml`, the self-hosted SigNoz deployment in `deploy/`, the load generator, and the frontend.
 
-4. **Test 4: Random Industry Chaos**:
-   * Click **`🎲 Inject Random Industry Chaos`** to demonstrate open-ended multi-signal telemetry resolution live on stage.
+**cyber-del** built the SRE controller in `SRE_controller/`: the diagnostic agent, the guardrail engine, the remediator, the MCP client and the control loop.
 
----
+## License
 
-## 📜 License
-Built for the **Agents of SigNoz Hackathon 2026**. Open source under MIT License.
+MIT.
