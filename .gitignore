@@ -1,10 +1,9 @@
-# Local AI context — never commit
-CLAUDE.md
-
 # Environment / secrets — never commit real env files, but DO keep the template
 .env
 .env.*
-!.env.example
+SRE_controller/state.json
+PROGRESS*.md
+HANDOVER*.md
 
 # Python
 __pycache__/
@@ -21,6 +20,4 @@ pours/
 # Logs
 *.log
 
-# settings 
-.claude
 
