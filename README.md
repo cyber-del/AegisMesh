@@ -85,12 +85,9 @@ Python, FastAPI, OpenTelemetry, SigNoz, Docker, and the Model Context Protocol. 
 
 ## Who built what
 
-A two-person hackathon team. The split is visible in `git log`.
+A two-person hackathon team. 
 
 **V. Abhishek Prakash** built the instrumented service layer: the three FastAPI microservices with their chaos and admin endpoints, the three `telemetry.py` modules, the Dockerfiles and `docker-compose.yml`, the self-hosted SigNoz deployment in `deploy/`, the load generator, and the frontend.
 
 **cyber-del** built the SRE controller in `SRE_controller/`: the diagnostic agent, the guardrail engine, the remediator, the MCP client and the control loop.
 
-## License
-
-MIT.
